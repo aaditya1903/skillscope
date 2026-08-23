@@ -14,7 +14,7 @@ from pydantic import (
     StringConstraints,
 )
 
-from skillscope.db.enums import ValidationStatus
+from skillscope.db.enums import SupportingFileType, ValidationStatus
 
 SkillName = Annotated[
     StrictStr,
@@ -45,6 +45,13 @@ class ValidationSeverity(StrEnum):
     INVALID = "invalid"
 
 
+class DirectoryEntryKind(StrEnum):
+    """Kind of one bounded entry below a skill directory."""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+
+
 class ValidationMessage(BaseModel):
     """One stable, machine-readable parser finding."""
 
@@ -56,6 +63,17 @@ class ValidationMessage(BaseModel):
     field: str | None = None
 
 
+class SkillDirectoryEntry(BaseModel):
+    """Untrusted metadata for one file or directory near ``SKILL.md``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    relative_path: str
+    kind: DirectoryEntryKind
+    size_bytes: int = Field(default=0, ge=0)
+    git_blob_sha: str | None = None
+
+
 class SkillSource(BaseModel):
     """Untrusted bytes and their repository-relative path."""
 
@@ -63,6 +81,7 @@ class SkillSource(BaseModel):
 
     path: str
     content: bytes
+    directory_entries: tuple[SkillDirectoryEntry, ...] = ()
 
 
 class SkillFrontmatter(BaseModel):
@@ -86,6 +105,40 @@ class SkillFrontmatter(BaseModel):
     )
 
 
+class SupportingFileMetadata(BaseModel):
+    """Safe metadata retained for a supporting file, never its contents."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    relative_path: str
+    file_type: SupportingFileType
+    size_bytes: int
+    git_blob_sha: str | None = None
+    extension: str | None = None
+
+
+class StructuralSignals(BaseModel):
+    """Interpretable signals extracted without rendering or executing content."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    headings: tuple[str, ...] = ()
+    referenced_paths: tuple[str, ...] = ()
+    declared_tools: tuple[str, ...] = ()
+    heading_count: int = 0
+    code_block_count: int = 0
+    link_count: int = 0
+    external_link_count: int = 0
+    word_count: int = 0
+    byte_count: int = 0
+    has_scripts: bool = False
+    has_references: bool = False
+    has_assets: bool = False
+    script_count: int = 0
+    reference_count: int = 0
+    asset_count: int = 0
+
+
 class ParsedSkill(BaseModel):
     """Safe parser result, including invalid and warning outcomes."""
 
@@ -95,5 +148,7 @@ class ParsedSkill(BaseModel):
     frontmatter: SkillFrontmatter | None
     extension_fields: dict[str, JsonValue] = Field(default_factory=dict)
     body_text: str
+    signals: StructuralSignals
+    supporting_files: tuple[SupportingFileMetadata, ...] = ()
     validation_status: ValidationStatus
     validation_messages: tuple[ValidationMessage, ...] = ()

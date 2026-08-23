@@ -20,14 +20,14 @@ not the user interface.
 ## Current milestone
 
 - Milestone: 3, safe `SKILL.md` parser
-- Objective: extract interpretable structural signals and complete parser edge-case coverage
+- Objective: parse and validate untrusted Agent Skills files while extracting bounded structural metadata
 - Exit gate: all parser fixtures pass; malicious content remains inert; validation reports multiple issues; standard fields and extensions remain separate; valid non-ASCII files are accepted
-- Status: active
+- Status: complete
 
 ## P0 release checklist
 
 - [ ] Reproducible GitHub discovery and ingestion
-- [ ] Safe Agent Skills parser and validation
+- [x] Safe Agent Skills parser and validation
 - [x] PostgreSQL/pgvector schema and migrations
 - [ ] Frozen dataset snapshot
 - [ ] BM25 implementation and tests
@@ -68,13 +68,13 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 29 passing
-- Parser core tests: 10 passing
-- Backend coverage: 95%
+- Backend tests: 39 passing
+- Parser core tests: 20 passing
+- Backend coverage: 97%
 - Database integration tests: 7 passing
 - Ruff formatting: passing
 - Ruff linting: passing
-- Strict mypy: passing across 15 source files
+- Strict mypy: passing across 20 source files
 - CLI version command: 0.1.0
 - API liveness: `/healthz` returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
@@ -110,6 +110,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Extract headings, code fences, links, referenced paths and text counts from inert Markdown.
-2. Derive scripts, references and assets metadata from bounded directory entries.
-3. Add the remaining parser boundary fixtures and complete the Milestone 3 exit gate.
+1. Verify the completed parser milestone in GitHub Actions.
+2. Start Milestone 4 by smoke-testing the authenticated GitHub API and recording rate-limit behaviour.
+3. Implement typed GitHub client foundations with safe endpoint construction, pagination and redacted errors.

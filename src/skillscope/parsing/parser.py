@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Hashable, Mapping
 from pathlib import PurePosixPath
+from urllib.parse import unquote
 
 import yaml
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -20,6 +21,7 @@ from skillscope.parsing.models import (
     ValidationMessage,
     ValidationSeverity,
 )
+from skillscope.parsing.signals import MAX_RELATIVE_PATH_LENGTH, extract_structural_signals
 
 STANDARD_FIELDS = frozenset(
     {
@@ -84,7 +86,7 @@ class SkillParser:
             document = extract_frontmatter(source.content)
         except FrontmatterError as exc:
             messages.append(_invalid(exc.code, str(exc)))
-            return _result(source.path, None, {}, "", messages)
+            return _result(source, None, {}, "", messages)
 
         try:
             raw_mapping = _load_yaml_mapping(document.frontmatter_text)
@@ -95,7 +97,7 @@ class SkillParser:
                     f"YAML frontmatter could not be parsed safely: {_yaml_problem(exc)}",
                 )
             )
-            return _result(source.path, None, {}, document.body_text, messages)
+            return _result(source, None, {}, document.body_text, messages)
 
         if not isinstance(raw_mapping, Mapping):
             messages.append(
@@ -104,7 +106,7 @@ class SkillParser:
                     "YAML frontmatter must be a mapping of field names to values.",
                 )
             )
-            return _result(source.path, None, {}, document.body_text, messages)
+            return _result(source, None, {}, document.body_text, messages)
 
         standard_values: dict[str, object] = {}
         extension_values: dict[str, JsonValue] = {}
@@ -154,7 +156,7 @@ class SkillParser:
             messages.extend(_pydantic_messages(exc))
 
         if frontmatter is not None and _path_is_valid(source.path):
-            parent_name = PurePosixPath(source.path).parent.name
+            parent_name = PurePosixPath(unquote(source.path)).parent.name
             if frontmatter.name != parent_name:
                 messages.append(
                     _invalid(
@@ -173,7 +175,7 @@ class SkillParser:
             )
 
         return _result(
-            source.path,
+            source,
             frontmatter,
             extension_values,
             document.body_text,
@@ -208,10 +210,17 @@ def _validate_source_path(path: str) -> list[ValidationMessage]:
 
 
 def _path_is_valid(path: str) -> bool:
-    if not path or path.startswith("/") or "\\" in path:
+    decoded_path = unquote(path)
+    if (
+        not decoded_path
+        or len(decoded_path) > MAX_RELATIVE_PATH_LENGTH
+        or decoded_path.startswith("/")
+        or "\\" in decoded_path
+        or any(ord(character) < 32 for character in decoded_path)
+    ):
         return False
 
-    parts = path.split("/")
+    parts = decoded_path.split("/")
     return (
         len(parts) >= 2
         and parts[-1] == "SKILL.md"
@@ -236,12 +245,20 @@ def _pydantic_messages(error: ValidationError) -> list[ValidationMessage]:
 
 
 def _result(
-    source_path: str,
+    source: SkillSource,
     frontmatter: SkillFrontmatter | None,
     extension_fields: dict[str, JsonValue],
     body_text: str,
     messages: list[ValidationMessage],
 ) -> ParsedSkill:
+    signal_extraction = extract_structural_signals(
+        body_text=body_text,
+        source_byte_count=len(source.content),
+        allowed_tools=frontmatter.allowed_tools if frontmatter is not None else None,
+        directory_entries=source.directory_entries,
+    )
+    messages.extend(signal_extraction.validation_messages)
+
     if any(message.severity is ValidationSeverity.INVALID for message in messages):
         status = ValidationStatus.INVALID
     elif messages:
@@ -250,10 +267,12 @@ def _result(
         status = ValidationStatus.VALID
 
     return ParsedSkill(
-        source_path=source_path,
+        source_path=source.path,
         frontmatter=frontmatter,
         extension_fields=extension_fields,
         body_text=body_text,
+        signals=signal_extraction.signals,
+        supporting_files=signal_extraction.supporting_files,
         validation_status=status,
         validation_messages=tuple(messages),
     )
