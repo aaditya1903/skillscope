@@ -19,7 +19,24 @@ jobs:
   backend-quality:
     name: Backend quality
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      SKILLSCOPE_TEST_DATABASE_URL: postgresql+psycopg://skillscope_test:skillscope_test@127.0.0.1:5432/skillscope_test
+
+    services:
+      database:
+        image: pgvector/pgvector:0.8.6-pg18-trixie
+        env:
+          POSTGRES_DB: skillscope_test
+          POSTGRES_USER: skillscope_test
+          POSTGRES_PASSWORD: skillscope_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skillscope_test -d skillscope_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
 
     steps:
       - name: Check out repository
@@ -46,6 +63,16 @@ jobs:
 
       - name: Type-check
         run: uv run mypy src
+
+      - name: Apply database migrations
+        run: uv run alembic upgrade head
+        env:
+          DATABASE_URL: ${{ env.SKILLSCOPE_TEST_DATABASE_URL }}
+
+      - name: Check migration drift
+        run: uv run alembic check
+        env:
+          DATABASE_URL: ${{ env.SKILLSCOPE_TEST_DATABASE_URL }}
 
       - name: Test with coverage
         run: >

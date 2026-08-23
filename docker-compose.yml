@@ -23,5 +23,29 @@ services:
       start_period: 5s
     stop_grace_period: 10s
 
+  db-test:
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    profiles:
+      - test
+    environment:
+      POSTGRES_DB: skillscope_test
+      POSTGRES_USER: skillscope_test
+      POSTGRES_PASSWORD: skillscope_test
+    ports:
+      - "127.0.0.1:${POSTGRES_TEST_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U skillscope_test -d skillscope_test",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    stop_grace_period: 10s
+
 volumes:
   postgres_data:
