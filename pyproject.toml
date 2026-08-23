@@ -1,0 +1,69 @@
+[project]
+name = "skillscope"
+version = "0.1.0"
+description = "A reproducible observatory for discovering and evaluating Agent Skills."
+readme = "README.md"
+authors = [
+    { name = "Aaditya Kumar", email = "aaditya.kumar.23@ucl.ac.uk" }
+]
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+dependencies = [
+    "alembic>=1.19.1",
+    "fastapi[standard]>=0.141.1",
+    "httpx>=0.28.1",
+    "numpy>=2.5.2",
+    "pgvector>=0.5.0",
+    "psycopg[binary]>=3.3.4",
+    "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "sqlalchemy>=2,<3",
+    "tenacity>=9.1.4",
+    "typer>=0.27.1",
+]
+
+[project.scripts]
+skillscope = "skillscope.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.12.0",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.4",
+    "types-pyyaml>=6.0.12.20260815",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["skillscope"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
