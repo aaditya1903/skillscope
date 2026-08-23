@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pgvector.sqlalchemy import VECTOR
@@ -39,6 +40,19 @@ from skillscope.db.enums import (
 )
 
 
+def _enum_check_constraint(
+    column_name: str,
+    enum_class: type[StrEnum],
+    *,
+    name: str,
+) -> CheckConstraint:
+    """Expose enum checks as named metadata constraints for Alembic."""
+
+    escaped_values = (member.value.replace("'", "''") for member in enum_class)
+    values_sql = ", ".join(f"'{value}'" for value in escaped_values)
+    return CheckConstraint(f"{column_name} IN ({values_sql})", name=name)
+
+
 class Repository(UUIDPrimaryKeyMixin, Base):
     """A public GitHub repository containing one or more Agent Skills."""
 
@@ -49,6 +63,11 @@ class Repository(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "stars_count >= 0 AND forks_count >= 0 AND open_issues_count >= 0",
             name="counts_nonnegative",
+        ),
+        _enum_check_constraint(
+            "license_status",
+            LicenseStatus,
+            name="license_status",
         ),
     )
 
@@ -71,7 +90,7 @@ class Repository(UUIDPrimaryKeyMixin, Base):
             LicenseStatus,
             name="license_status",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         )
@@ -99,6 +118,11 @@ class Skill(UUIDPrimaryKeyMixin, Base):
             "AND heading_count >= 0 AND code_block_count >= 0 "
             "AND external_link_count >= 0 AND word_count >= 0 AND byte_count >= 0",
             name="counts_nonnegative",
+        ),
+        _enum_check_constraint(
+            "validation_status",
+            ValidationStatus,
+            name="validation_status",
         ),
     )
 
@@ -133,7 +157,7 @@ class Skill(UUIDPrimaryKeyMixin, Base):
             ValidationStatus,
             name="validation_status",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         )
@@ -180,6 +204,11 @@ class SkillFile(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (
         UniqueConstraint("skill_id", "relative_path"),
         CheckConstraint("size_bytes >= 0", name="size_bytes_nonnegative"),
+        _enum_check_constraint(
+            "file_type",
+            SupportingFileType,
+            name="supporting_file_type",
+        ),
     )
 
     skill_id: Mapped[UUID] = mapped_column(
@@ -192,7 +221,7 @@ class SkillFile(UUIDPrimaryKeyMixin, Base):
             SupportingFileType,
             name="supporting_file_type",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         )
@@ -214,6 +243,11 @@ class IngestionRun(UUIDPrimaryKeyMixin, Base):
             "AND parsed_count >= 0 AND invalid_count >= 0 AND error_count >= 0",
             name="counts_nonnegative",
         ),
+        _enum_check_constraint(
+            "status",
+            IngestionRunStatus,
+            name="ingestion_run_status",
+        ),
     )
 
     status: Mapped[IngestionRunStatus] = mapped_column(
@@ -221,7 +255,7 @@ class IngestionRun(UUIDPrimaryKeyMixin, Base):
             IngestionRunStatus,
             name="ingestion_run_status",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         ),
@@ -268,6 +302,11 @@ class IngestionRunItem(UUIDPrimaryKeyMixin, Base):
             "duration_ms IS NULL OR duration_ms >= 0",
             name="duration_ms_nonnegative",
         ),
+        _enum_check_constraint(
+            "status",
+            IngestionItemStatus,
+            name="ingestion_item_status",
+        ),
     )
 
     ingestion_run_id: Mapped[UUID] = mapped_column(
@@ -281,7 +320,7 @@ class IngestionRunItem(UUIDPrimaryKeyMixin, Base):
             IngestionItemStatus,
             name="ingestion_item_status",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         )
@@ -299,6 +338,11 @@ class EvaluationQuery(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "evaluation_queries"
     __table_args__ = (
         CheckConstraint("char_length(btrim(query_text)) > 0", name="query_text_nonempty"),
+        _enum_check_constraint(
+            "split",
+            EvaluationSplit,
+            name="evaluation_split",
+        ),
     )
 
     query_text: Mapped[str] = mapped_column(Text)
@@ -308,7 +352,7 @@ class EvaluationQuery(UUIDPrimaryKeyMixin, Base):
             EvaluationSplit,
             name="evaluation_split",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         )
@@ -354,6 +398,13 @@ class EvaluationRun(UUIDPrimaryKeyMixin, Base):
     """Metrics and latency evidence for one retrieval method and snapshot."""
 
     __tablename__ = "evaluation_runs"
+    __table_args__ = (
+        _enum_check_constraint(
+            "method",
+            RetrievalMethod,
+            name="retrieval_method",
+        ),
+    )
 
     name: Mapped[str] = mapped_column(String(255))
     dataset_snapshot_sha: Mapped[str] = mapped_column(String(71))
@@ -363,7 +414,7 @@ class EvaluationRun(UUIDPrimaryKeyMixin, Base):
             RetrievalMethod,
             name="retrieval_method",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda enum_class: [member.value for member in enum_class],
         )

@@ -20,7 +20,7 @@ not the user interface.
 ## Current milestone
 
 - Milestone: 2, PostgreSQL, pgvector and migrations
-- Objective: establish persistent storage, models and reproducible migrations
+- Objective: verify persistence, vector storage and constraints through PostgreSQL-backed integration tests
 - Exit gate: healthy database, empty-database migration, vector insert, constraint tests and downgrade/upgrade verification
 - Status: active
 
@@ -68,13 +68,18 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 5 passing
-- Backend coverage: 92%
+- Backend tests: 12 passing
+- Backend coverage: 97%
 - Ruff formatting: passing
 - Ruff linting: passing
-- Strict mypy: passing across 10 source files
+- Strict mypy: passing across 15 source files
 - CLI version command: 0.1.0
 - API liveness: `/healthz` returned HTTP 200 with the expected response
+- Database service: PostgreSQL 18.6 healthy through Docker Compose
+- Vector extension: pgvector 0.8.6
+- Migration head: `ddfda2ba04bd`
+- Migration round trip: `base -> head -> base -> head` passing
+- Alembic schema drift: no new upgrade operations detected
 - Repositories: not measured
 - Skills: not measured
 - Retrieval evaluation: not started
@@ -91,7 +96,8 @@ not the user interface.
 | Pin Node 24 LTS when frontend work begins | Prefer an LTS runtime for local development and CI | 2026-08-23 | Not required |
 | Treat PostgreSQL as the source of truth | Required for realistic JSONB, migrations and pgvector behaviour | 2026-08-23 | Planned |
 | Build evaluated retrieval before the interface | Evaluation is the project's central technical contribution | 2026-08-23 | Planned |
-| Keep upstream skill bodies out of committed datasets | Respect licensing and redistribution boundaries | 2026-08-23 | Planned |
+| Keep upstream skill bodies out of committed datasets | Respect licensing and redistribution boundaries | 2026-08-23 | Planned || Manage pgvector through the initial migration | Guarantees reproducible extension setup and a reversible clean-database migration | 2026-08-23 | Not required |
+| Represent non-native enums with explicit named CHECK constraints | Preserves Python enum validation while allowing Alembic 1.19 to compare the constraints accurately | 2026-08-23 | Not required |
 
 ## Blockers
 
@@ -99,6 +105,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Start and verify PostgreSQL with pgvector through Docker Compose.
-2. Implement SQLAlchemy sessions, enums and database models.
-3. Configure Alembic and test the initial migration.
+1. Commit the verified initial Alembic migration.
+2. Add isolated PostgreSQL integration-test fixtures that run against the migrated schema.
+3. Verify repository and skill insertion, 384-dimensional vector storage and duplicate-constraint rejection.

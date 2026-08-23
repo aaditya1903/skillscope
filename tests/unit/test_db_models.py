@@ -1,7 +1,8 @@
 """Schema-shape tests that do not require a running database."""
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy import Enum as SAEnum
 
 from skillscope.db import models as db_models
 from skillscope.db.base import Base
@@ -60,3 +61,31 @@ def test_public_enum_values_are_stable() -> None:
         "invalid",
     ]
     assert [method.value for method in RetrievalMethod] == ["bm25", "dense", "hybrid"]
+
+
+def test_enum_columns_use_explicit_named_check_constraints() -> None:
+    expected_names = {
+        "ck_evaluation_queries_evaluation_split",
+        "ck_evaluation_runs_retrieval_method",
+        "ck_ingestion_run_items_ingestion_item_status",
+        "ck_ingestion_runs_ingestion_run_status",
+        "ck_repositories_license_status",
+        "ck_skill_files_supporting_file_type",
+        "ck_skills_validation_status",
+    }
+    actual_names = {
+        constraint.name
+        for table in Base.metadata.tables.values()
+        for constraint in table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    enum_types = [
+        column.type
+        for table in Base.metadata.tables.values()
+        for column in table.columns
+        if isinstance(column.type, SAEnum)
+    ]
+
+    assert len(enum_types) == 7
+    assert all(enum_type.create_constraint is False for enum_type in enum_types)
+    assert expected_names <= actual_names
