@@ -19,16 +19,16 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 2, PostgreSQL, pgvector and migrations
-- Objective: verify persistence, vector storage and constraints through PostgreSQL-backed integration tests
-- Exit gate: healthy database, empty-database migration, vector insert, constraint tests and downgrade/upgrade verification
+- Milestone: 3, safe `SKILL.md` parser
+- Objective: extract interpretable structural signals and complete parser edge-case coverage
+- Exit gate: all parser fixtures pass; malicious content remains inert; validation reports multiple issues; standard fields and extensions remain separate; valid non-ASCII files are accepted
 - Status: active
 
 ## P0 release checklist
 
 - [ ] Reproducible GitHub discovery and ingestion
 - [ ] Safe Agent Skills parser and validation
-- [ ] PostgreSQL/pgvector schema and migrations
+- [x] PostgreSQL/pgvector schema and migrations
 - [ ] Frozen dataset snapshot
 - [ ] BM25 implementation and tests
 - [ ] Labelled queries and qrels
@@ -68,8 +68,10 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 12 passing
-- Backend coverage: 97%
+- Backend tests: 29 passing
+- Parser core tests: 10 passing
+- Backend coverage: 95%
+- Database integration tests: 7 passing
 - Ruff formatting: passing
 - Ruff linting: passing
 - Strict mypy: passing across 15 source files
@@ -80,12 +82,15 @@ not the user interface.
 - Migration head: `ddfda2ba04bd`
 - Migration round trip: `base -> head -> base -> head` passing
 - Alembic schema drift: no new upgrade operations detected
+- Alembic revision: `ddfda2ba04bd`
+- pgvector version: 0.8.6
 - Repositories: not measured
 - Skills: not measured
 - Retrieval evaluation: not started
 - Private GitHub repository: `aaditya1903/skillscope`
 - GitHub Actions: passing
-- Verified CI commit: `ed592eeba5d01e7bac7e4f05139310d89ca0bd6d`
+- Verified CI commit: `95b7b1b31bc73be9db5225be8e8b1f40acdd9f0f`
+- Verified CI run: `https://github.com/aaditya1903/skillscope/actions/runs/32652090010`
 
 ## Decisions
 
@@ -105,6 +110,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Commit the verified initial Alembic migration.
-2. Add isolated PostgreSQL integration-test fixtures that run against the migrated schema.
-3. Verify repository and skill insertion, 384-dimensional vector storage and duplicate-constraint rejection.
+1. Extract headings, code fences, links, referenced paths and text counts from inert Markdown.
+2. Derive scripts, references and assets metadata from bounded directory entries.
+3. Add the remaining parser boundary fixtures and complete the Milestone 3 exit gate.
