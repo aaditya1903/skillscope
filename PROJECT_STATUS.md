@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 1, repository and backend scaffold
-- Objective: add continuous integration and verify the private GitHub repository
-- Exit gate: local quality checks pass, remote CI passes and `/healthz` remains operational
+- Milestone: 2, PostgreSQL, pgvector and migrations
+- Objective: establish persistent storage, models and reproducible migrations
+- Exit gate: healthy database, empty-database migration, vector insert, constraint tests and downgrade/upgrade verification
 - Status: active
 
 ## P0 release checklist
@@ -78,6 +78,9 @@ not the user interface.
 - Repositories: not measured
 - Skills: not measured
 - Retrieval evaluation: not started
+- Private GitHub repository: `aaditya1903/skillscope`
+- GitHub Actions: passing
+- Verified CI commit: `ed592eeba5d01e7bac7e4f05139310d89ca0bd6d`
 
 ## Decisions
 
@@ -96,6 +99,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Commit the verified local backend scaffold.
-2. Add the initial GitHub Actions backend-quality workflow.
-3. Create and verify the private GitHub repository.
+1. Start and verify PostgreSQL with pgvector through Docker Compose.
+2. Implement SQLAlchemy sessions, enums and database models.
+3. Configure Alembic and test the initial migration.
