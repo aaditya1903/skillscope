@@ -19,10 +19,10 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 3, safe `SKILL.md` parser
-- Objective: parse and validate untrusted Agent Skills files while extracting bounded structural metadata
-- Exit gate: all parser fixtures pass; malicious content remains inert; validation reports multiple issues; standard fields and extensions remain separate; valid non-ASCII files are accepted
-- Status: complete
+- Milestone: 4, GitHub client and discovery
+- Objective: verify the current GitHub REST API contract, then implement a typed and read-only discovery client
+- Exit gate: client tests pass without network access; one authenticated smoke test discovers real public candidates; tokens never appear in logs; the candidate manifest records exact queries and identifiers; discovery limitations are documented
+- Status: active
 
 ## P0 release checklist
 
@@ -69,26 +69,35 @@ not the user interface.
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
 - Backend tests: 39 passing
-- Parser core tests: 20 passing
-- Backend coverage: 97%
+- Parser core tests: 67 passing
+- Backend coverage: 95%
 - Database integration tests: 7 passing
-- Ruff formatting: passing
+- Ruff formatting: passing across 48 files
 - Ruff linting: passing
-- Strict mypy: passing across 20 source files
+- Strict mypy: passing across 23 source files
+- GitHub payload and validation tests: 28 passing
 - CLI version command: 0.1.0
 - API liveness: `/healthz` returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
 - Vector extension: pgvector 0.8.6
 - Migration head: `ddfda2ba04bd`
 - Migration round trip: `base -> head -> base -> head` passing
+- Alembic migration drift: none detected
 - Alembic schema drift: no new upgrade operations detected
 - Alembic revision: `ddfda2ba04bd`
 - pgvector version: 0.8.6
 - Repositories: not measured
 - Skills: not measured
 - Retrieval evaluation: not started
+- Authenticated GitHub REST API smoke test: passing
+- Official seed search: 20 indexed `SKILL.md` matches in `anthropics/skills`
+- Authenticated API limits observed: 5,000 core requests/hour and 10 code-search requests/minute
+- Conditional contents request: returned HTTP 304 using ETag
 - Private GitHub repository: `aaditya1903/skillscope`
 - GitHub Actions: passing
+- GitHub code search pagination: verified
+- GitHub contents conditional request: HTTP 304 verified
+- GitHub REST API version: 2026-03-10
 - Verified CI commit: `95b7b1b31bc73be9db5225be8e8b1f40acdd9f0f`
 - Verified CI run: `https://github.com/aaditya1903/skillscope/actions/runs/32652090010`
 
@@ -102,7 +111,7 @@ not the user interface.
 | Treat PostgreSQL as the source of truth | Required for realistic JSONB, migrations and pgvector behaviour | 2026-08-23 | Planned |
 | Build evaluated retrieval before the interface | Evaluation is the project's central technical contribution | 2026-08-23 | Planned |
 | Keep upstream skill bodies out of committed datasets | Respect licensing and redistribution boundaries | 2026-08-23 | Planned || Manage pgvector through the initial migration | Guarantees reproducible extension setup and a reversible clean-database migration | 2026-08-23 | Not required |
-| Represent non-native enums with explicit named CHECK constraints | Preserves Python enum validation while allowing Alembic 1.19 to compare the constraints accurately | 2026-08-23 | Not required |
+| Represent non-native enums with explicit named CHECK constraints | Preserves Python enum validation while allowing Alembic 1.19 to compare the constraints accurately | 2026-08-23 | Not required | Pin GitHub REST requests to version `2026-03-10` | Live contents response confirmed the selected version; explicit versioning prevents silent API drift | 2026-08-23 | Not required |
 
 ## Blockers
 
@@ -110,6 +119,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Verify the completed parser milestone in GitHub Actions.
-2. Start Milestone 4 by smoke-testing the authenticated GitHub API and recording rate-limit behaviour.
-3. Implement typed GitHub client foundations with safe endpoint construction, pagination and redacted errors.
+1. Implement the asynchronous read-only GitHub transport with bounded retries and redacted errors.
+2. Add Link-header pagination, ETag caching and rate-limit parsing.
+3. Implement deterministic discovery queries, seed repositories and candidate manifest output.
