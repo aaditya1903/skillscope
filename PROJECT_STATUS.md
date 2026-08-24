@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 4, GitHub client and discovery
-- Objective: complete live candidate-manifest verification and document the limits of the reproducible GitHub discovery sample
-- Exit gate: client tests pass without network access; one authenticated smoke test discovers real public candidates; tokens never appear in logs; the candidate manifest records exact queries and identifiers; discovery limitations are documented
+- Milestone: 5, idempotent ingestion
+- Objective: combine bounded GitHub discovery and fetching with safe parsing, structural analysis and transactional database upserts
+- Exit gate: a second identical run produces unchanged rather than duplicate records; every failure has a category and safe message; counts reconcile between manifest and database; at least 100 unique skills are ingested if available, otherwise the truthful discovery result and blocker are documented; no raw third-party corpus is committed
 - Status: active
 
 ## P0 release checklist
@@ -87,6 +87,14 @@ not the user interface.
 - Candidate manifest format: versioned canonical UTF-8 JSONL recording run metadata, exact queries, page boundaries and candidate identifiers
 - Candidate manifest determinism: byte-for-byte serialization and validated read/write round trips verified
 - Candidate manifest safety: atomic replacement preserves prior files on failure; upstream skill bodies are excluded
+- Milestone 4 exit gate: complete
+- Live candidate manifest: `data/manifests/candidates.jsonl`
+- Live manifest provenance: schema 1 generated at `2026-08-24T08:51:30.226222Z` from commit `4e30e196e018ee91b78c58a4b4612e13586daa21`
+- Live manifest evidence: 10 candidates, 1 consumed search page, 12 JSONL records and 5,321 bytes
+- Live manifest SHA-256: `6165af211a783f4c5c710772f11d0b26f52e2f0f6fbae5c2eda1c28c4802f18f`
+- Live code-search budget: 10 requests remaining before discovery and 9 after
+- Live manifest safety: token-free and upstream-body-free
+- Discovery limitations: documented in `docs/discovery.md`; results are a reproducible sample, not a complete census
 - Ruff formatting: passing across 56 files
 - Ruff linting: passing
 - Strict mypy: passing across 27 source files
@@ -116,8 +124,8 @@ not the user interface.
 - Retrieval evaluation: not started
 - Private GitHub repository: aaditya1903/skillscope
 - Latest pushed GitHub Actions workflow: passing
-- Latest CI-verified commit: `d93db5aebba32a675f29876f10c35023276ec834`
-- Latest verified CI run: [32692787489](https://github.com/aaditya1903/skillscope/actions/runs/32692787489)
+- Latest CI-verified commit: `4e30e196e018ee91b78c58a4b4612e13586daa21`
+- Latest verified CI run: [32707976999](https://github.com/aaditya1903/skillscope/actions/runs/32707976999)
 
 ## Decisions
 
@@ -135,6 +143,7 @@ not the user interface.
 | Bound fetched skill files and directory metadata | Limits memory use and keeps untrusted GitHub responses within explicit ingestion constraints | 2026-08-24 | Not required |
 | Deduplicate discovered skills by GitHub repository ID and path | Repository IDs remain stable across renames while the path identifies the file within a repository | 2026-08-24 | Not required |
 | Store candidate manifests as canonical versioned JSONL | Supports deterministic diffs, streaming validation and reproducible discovery evidence without committing upstream bodies | 2026-08-24 | Not required |
+| Treat discovery output as a reproducible sample rather than a census | GitHub search caps, scope restrictions, index changes and query choices make exhaustiveness unverifiable | 2026-08-24 | Not required |
 
 ## Blockers
 
@@ -142,6 +151,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Run one bounded authenticated discovery and write a small candidate manifest.
-2. Inspect the manifest for exact queries, page boundaries, identifiers and absence of upstream bodies or secrets.
-3. Document GitHub Code Search caps and indexing limitations, then close Milestone 4.
+1. Design typed ingestion orchestration results and safe failure categories.
+2. Implement transactional repository and skill upserts with unchanged-SHA detection.
+3. Add integration tests for first run, identical rerun, per-item failure and count reconciliation.
