@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from skillscope.db.enums import IngestionItemStatus, IngestionRunStatus
+from skillscope.db.enums import IngestionItemStatus, IngestionRunStatus, ValidationStatus
 from skillscope.db.models import IngestionRun, IngestionRunItem, Repository, Skill
 from skillscope.ingestion.github_client import (
     GitHubPayloadTooLargeError,
@@ -292,6 +292,45 @@ async def test_identical_second_run_is_unchanged_without_duplicates(
     assert client.directory_requests == 1
     assert len(runs) == 2
     assert all(run.status is IngestionRunStatus.COMPLETED for run in runs)
+
+
+@pytest.mark.asyncio
+async def test_repository_root_skill_is_ingested_with_an_unverifiable_name_warning(
+    db_session: Session,
+) -> None:
+    client = FakeIngestionClient()
+    full_name = "skillscope-tests/root-catalogue"
+    path = "SKILL.md"
+    sha = "9" * 40
+    client.add_repository(full_name, 509)
+    client.add_file(full_name, path, sha, _skill_content("portable-root-skill"))
+    factory = _factory(db_session)
+
+    summary = await run_ingestion(
+        client,
+        factory,
+        _manifest([(509, full_name, path, sha)]),
+        manifest_path=Path("data/manifests/root-candidate.jsonl"),
+        git_commit_sha=GIT_COMMIT,
+    )
+
+    with factory() as verification:
+        skill = verification.scalar(
+            select(Skill)
+            .join(Repository, Skill.repository_id == Repository.id)
+            .where(
+                Repository.github_repository_id == 509,
+                Skill.path == path,
+            )
+        )
+
+    assert summary.ingested_count == 1
+    assert summary.invalid_count == 0
+    assert skill is not None
+    assert skill.validation_status is ValidationStatus.WARNING
+    assert {message["code"] for message in skill.validation_messages_json} == {
+        "root_directory_name_unverified"
+    }
 
 
 @pytest.mark.asyncio

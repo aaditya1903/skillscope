@@ -12,6 +12,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from skillscope.core.config import get_settings
+from skillscope.db.base import Base
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL_ENV = "SKILLSCOPE_TEST_DATABASE_URL"
@@ -73,10 +74,12 @@ def migrated_engine() -> Iterator[Engine]:
 
 @pytest.fixture
 def db_session(migrated_engine: Engine) -> Iterator[Session]:
-    """Roll back all writes after each test, including explicit commits."""
+    """Expose an empty application schema and restore prior rows after each test."""
 
     with migrated_engine.connect() as connection:
         outer_transaction = connection.begin()
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(table.delete())
         session = Session(
             bind=connection,
             expire_on_commit=False,

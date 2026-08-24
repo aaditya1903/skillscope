@@ -20,6 +20,13 @@ untrusted data.
 - Per-item failures use stable categories and fixed safe messages. Unexpected
   exception text is not copied into manifests.
 
+Repository-root `SKILL.md` files are safe relative paths and remain eligible
+for ingestion. GitHub's repository-relative path does not encode the local
+directory name that a clone will use, so the Agent Skills name-to-parent rule
+cannot be verified for those files. SkillScope records the stable
+`root_directory_name_unverified` warning instead. Nested `SKILL.md` files still
+receive strict name-to-parent-directory validation.
+
 ## Discovery
 
 Run bounded discovery from the checked-in seed list:

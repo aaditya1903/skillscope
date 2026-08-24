@@ -157,7 +157,16 @@ class SkillParser:
 
         if frontmatter is not None and _path_is_valid(source.path):
             parent_name = PurePosixPath(unquote(source.path)).parent.name
-            if frontmatter.name != parent_name:
+            if not parent_name:
+                messages.append(
+                    _warning(
+                        "root_directory_name_unverified",
+                        "The name-to-parent-directory rule cannot be verified for a "
+                        "repository-root SKILL.md.",
+                        field="name",
+                    )
+                )
+            elif frontmatter.name != parent_name:
                 messages.append(
                     _invalid(
                         "name_directory_mismatch",
@@ -221,11 +230,7 @@ def _path_is_valid(path: str) -> bool:
         return False
 
     parts = decoded_path.split("/")
-    return (
-        len(parts) >= 2
-        and parts[-1] == "SKILL.md"
-        and all(part not in {"", ".", ".."} for part in parts)
-    )
+    return parts[-1] == "SKILL.md" and all(part not in {"", ".", ".."} for part in parts)
 
 
 def _pydantic_messages(error: ValidationError) -> list[ValidationMessage]:

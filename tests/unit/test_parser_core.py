@@ -69,6 +69,20 @@ def test_invalid_name_and_directory_mismatch() -> None:
     assert "name_directory_mismatch" in _codes(mismatch)
 
 
+def test_repository_root_skill_is_safe_with_an_explicit_verification_warning() -> None:
+    result = _parse(
+        "SKILL.md",
+        "---\n"
+        "name: portable-root-skill\n"
+        "description: A repository-root skill with no encoded parent directory.\n"
+        "---\n"
+        "Body\n",
+    )
+
+    assert result.validation_status is ValidationStatus.WARNING
+    assert _codes(result) == {"root_directory_name_unverified"}
+
+
 def test_crlf_and_non_ascii_body_are_accepted() -> None:
     crlf_result = _parse(
         "multilingual/SKILL.md",
