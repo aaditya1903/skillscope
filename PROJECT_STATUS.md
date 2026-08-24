@@ -68,38 +68,45 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 39 passing
-- Parser core tests: 67 passing
+- Backend tests: 97 passing locally
 - Backend coverage: 95%
 - Database integration tests: 7 passing
-- Ruff formatting: passing across 48 files
-- Ruff linting: passing
-- Strict mypy: passing across 23 source files
+- Parser core tests: 10 passing
+- Parser structural-signal tests: 10 passing
+- Total parser tests: 20 passing
 - GitHub payload and validation tests: 28 passing
+- GitHub REST client tests: 30 passing
+- Ruff formatting: passing across 51 files
+- Ruff linting: passing
+- Strict mypy: passing across 25 source files
 - CLI version command: 0.1.0
-- API liveness: `/healthz` returned HTTP 200 with the expected response
+- API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
 - Vector extension: pgvector 0.8.6
-- Migration head: `ddfda2ba04bd`
-- Migration round trip: `base -> head -> base -> head` passing
-- Alembic migration drift: none detected
-- Alembic schema drift: no new upgrade operations detected
-- Alembic revision: `ddfda2ba04bd`
-- pgvector version: 0.8.6
-- Repositories: not measured
-- Skills: not measured
-- Retrieval evaluation: not started
+- Migration head: ddfda2ba04bd
+- Migration round trip: base -> head -> base -> head passing
+- Alembic migration drift: no new upgrade operations detected
+- Alembic logging isolation: existing application loggers remain enabled during migration-backed workflows
+- GitHub REST transport: authenticated, versioned and read-only
+- GitHub REST transport endpoints: rate-limit inspection and repository metadata
+- GitHub REST transport reliability: bounded retries, explicit timeouts and maximum concurrency of five verified
+- GitHub rate-limit handling: Retry-After, reset timestamps and exhausted-limit behavior verified
+- GitHub transport security: authorization redaction, safe error messages and
+- GitHub-only redirects verified
+- GitHub request observability: correlation IDs verified in structured logs
 - Authenticated GitHub REST API smoke test: passing
-- Official seed search: 20 indexed `SKILL.md` matches in `anthropics/skills`
-- Authenticated API limits observed: 5,000 core requests/hour and 10 code-search requests/minute
-- Conditional contents request: returned HTTP 304 using ETag
-- Private GitHub repository: `aaditya1903/skillscope`
-- GitHub Actions: passing
-- GitHub code search pagination: verified
-- GitHub contents conditional request: HTTP 304 verified
+- Official seed search: 20 indexed SKILL.md matches in anthropics/skills
+- Authenticated API limits observed: 5,000 core requests/hour, 30 search requests/minute and 10 code-search requests/minute
+- GitHub code-search Link pagination headers: verified in the live smoke test
+- GitHub contents conditional request: HTTP 304 verified using ETag
 - GitHub REST API version: 2026-03-10
-- Verified CI commit: `95b7b1b31bc73be9db5225be8e8b1f40acdd9f0f`
-- Verified CI run: `https://github.com/aaditya1903/skillscope/actions/runs/32652090010`
+- Repositories ingested: not measured
+- Skills ingested: not measured
+- Retrieval evaluation: not started
+- Private GitHub repository: aaditya1903/skillscope
+- Latest pushed GitHub Actions workflow: passing
+- Latest CI-verified commit: dddb4dcba5557cd87d583cc4fc5af19509b1ecec
+- Latest verified CI run: 32667936774
 
 ## Decisions
 
@@ -119,6 +126,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Implement the asynchronous read-only GitHub transport with bounded retries and redacted errors.
-2. Add Link-header pagination, ETag caching and rate-limit parsing.
-3. Implement deterministic discovery queries, seed repositories and candidate manifest output.
+1. Add Link-header pagination and conditional ETag requests.
+2. Implement repository contents and containing-directory fetch methods.
+3. Implement deterministic search queries, seed repositories and candidate manifest output.
