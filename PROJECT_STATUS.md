@@ -20,7 +20,7 @@ not the user interface.
 ## Current milestone
 
 - Milestone: 7, relevance judgements and baseline evaluation
-- Objective: create frozen development and test queries with qrels, then evaluate BM25 using independently verified ranking metrics
+- Objective: freeze the evaluation contract, generate a rank-blinded candidate pool, and complete human qrel labelling before running development-only BM25 metrics
 - Exit gate: query and qrel files validate; no qrel references missing skill IDs; metric formulas pass known examples; BM25 development metrics and failure examples are saved; no test queries are used for tuning
 - Status: active
 
@@ -68,7 +68,7 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 200 passing locally and in CI
+- Backend tests: 253 passing in the full Milestone 7 Batch 1 local quality gate
 - Latest explicitly recorded backend coverage: 88% before the Milestone 6 additions; CI coverage collection remains passing
 - PostgreSQL-backed integration tests: 17 passing
 - Parser core tests: 11 passing
@@ -122,9 +122,9 @@ not the user interface.
 - BM25 direct-intent ranks across the 5 smoke queries: 2, 1, 2, 5 and 1
 - BM25 qualitative limitation: unweighted term frequency and document-length effects can rank adjacent document tools or broadly matching skills above the most literal skill; the PDF query was the weakest case
 - BM25 CLI: deterministic JSON results expose matched terms and per-term score components without returning skill bodies
-- Ruff formatting: passing across 77 files
+- Ruff formatting: passing across 92 files
 - Ruff linting: passing
-- Strict mypy: passing across 35 source files
+- Strict mypy: passing across 41 source files
 - CLI version command: 0.1.0
 - API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
@@ -147,6 +147,14 @@ not the user interface.
 - GitHub content safety bounds: 256 KiB files, 1,000 directory entries and strict Base64 validation
 - GitHub REST API version: 2026-03-10
 - Formal retrieval evaluation: Milestone 7 active; smoke queries are not qrels and were not used to tune BM25
+- Frozen evaluation queries: 24 total, comprising 16 development and 8 locked test queries
+- Evaluation query provenance: canonical JSONL tied to the frozen dataset snapshot SHA-256
+- Evaluation pooling design: union of BM25 top-20 results and pre-authored query seeds, with deterministic rank- and split-blinded worksheet ordering
+- Evaluation relevance scale: 0 not relevant, 1 partially relevant and 2 highly relevant
+- Evaluation identity contract: portable GitHub repository ID/path document IDs plus frozen content SHA-256, resolved to live skill UUIDs during validation
+- Evaluation metrics implemented: macro nDCG@10, MRR@10 and Recall@10 with graded gain and hand-calculated unit tests
+- Evaluation leakage protection: test metrics require an explicit unlock and remain prohibited until the final Milestone 8 comparison
+- Milestone 7 Batch 1 tests: 53 query-contract, qrel-validation, pooling, worksheet-safety, metric, report and CLI tests
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -177,13 +185,17 @@ not the user interface.
 | Use ordinary unweighted BM25 with binary repeated-query-term weighting | Keeps the first lexical baseline transparent and prevents repeated query words from silently multiplying their influence | 2026-08-24 | Not required |
 | Keep stop words and avoid stemming in the initial BM25 baseline | Preserves a reproducible untuned baseline whose weaknesses can be measured against labelled development queries | 2026-08-24 | Not required |
 | Do not tune BM25 on the five manual smoke queries | The smoke review checks basic usefulness; parameter choices must wait for the frozen development split to avoid informal overfitting | 2026-08-24 | Not required |
+| Freeze 24 task-oriented queries into a 16-development and 8-test split | Provides enough category diversity for a portfolio evaluation while keeping manual qrel labelling tractable | 2026-08-25 | Not required |
+| Use stable repository-ID/path document identifiers with content hashes in qrels | Database UUIDs can change after clean ingestion, while repository IDs, paths and frozen hashes remain portable and drift-detectable | 2026-08-25 | Not required |
+| Blind candidate ranks during relevance labelling | Prevents the labeller from treating BM25 order as ground truth while retaining full pooling provenance separately | 2026-08-25 | Not required |
+| Lock test metrics behind an explicit release flag | Keeps embedding and hybrid configuration decisions restricted to development evidence | 2026-08-25 | Not required |
 
 ## Blockers
 
-No active blockers.
+Human relevance judgements are required after the deterministic candidate pool is generated.
 
 ## Next three actions
 
-1. Write the relevance-labelling guide and freeze 20 to 30 realistic queries into development and test splits.
-2. Pool BM25 candidates, label qrels against valid frozen skill IDs and validate every reference.
-3. Implement and hand-test nDCG@10, MRR@10 and Recall@10, then save BM25 development metrics and failure examples without inspecting test metrics for tuning.
+1. Generate the canonical BM25-plus-seed candidate pool and rank-blinded CSV worksheet.
+2. Label every pooled candidate using the documented 0-to-2 relevance scale, then import and validate canonical qrels.
+3. Run BM25 on development queries only and save aggregate metrics plus deterministic failure examples.

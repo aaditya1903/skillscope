@@ -17,7 +17,34 @@ from rich.console import Console
 
 from skillscope import __version__
 from skillscope.core.config import get_settings
+from skillscope.db.enums import EvaluationSplit
 from skillscope.db.session import get_session_factory
+from skillscope.evaluation.config import EvaluationConfig, load_evaluation_config
+from skillscope.evaluation.data import (
+    EvaluationDataError,
+    QuerySet,
+    read_qrel_set,
+    read_query_set,
+    serialize_qrel_set,
+    serialize_query_set,
+    sha256_bytes,
+    validate_evaluation_dataset,
+    write_qrel_set,
+)
+from skillscope.evaluation.pooling import (
+    CandidatePool,
+    build_bm25_candidate_pool,
+    qrels_from_label_worksheet,
+    read_candidate_pool,
+    serialize_candidate_pool,
+    write_candidate_pool,
+    write_label_worksheet,
+)
+from skillscope.evaluation.runner import (
+    evaluate_bm25,
+    serialize_evaluation_report,
+    write_evaluation_report,
+)
 from skillscope.ingestion.discovery import (
     MAX_DISCOVERY_PAGES_PER_QUERY,
     MAX_DISCOVERY_TARGET,
@@ -47,10 +74,18 @@ DEFAULT_SEEDS_PATH = Path("data/seeds/repositories.txt")
 DEFAULT_CANDIDATE_MANIFEST_PATH = Path("data/manifests/candidates.jsonl")
 DEFAULT_DATASET_SNAPSHOT_PATH = Path("data/manifests/dataset-snapshot.jsonl")
 DEFAULT_BM25_CONFIG_PATH = Path("config/retrieval/bm25-v1.json")
+DEFAULT_EVALUATION_CONFIG_PATH = Path("config/evaluation/evaluation-v1.json")
+DEFAULT_LABEL_WORKSHEET_PATH = Path("/tmp/skillscope-m7-labels.csv")
+DEFAULT_DEVELOPMENT_REPORT_PATH = Path("reports/evaluation/bm25-development-v1.json")
 
 app = typer.Typer(no_args_is_help=True, help="Operate the SkillScope observatory.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Discover and ingest public skills.")
+evaluation_app = typer.Typer(
+    no_args_is_help=True,
+    help="Build and run frozen retrieval evaluations.",
+)
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(evaluation_app, name="evaluate")
 console = Console()
 
 
@@ -99,6 +134,96 @@ def search_bm25(
             snapshot_path=snapshot,
         )
     except (CorpusIntegrityError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@evaluation_app.command("pool")
+def evaluation_pool(
+    config: Annotated[
+        Path,
+        typer.Option(help="Versioned retrieval-evaluation configuration."),
+    ] = DEFAULT_EVALUATION_CONFIG_PATH,
+    worksheet: Annotated[
+        Path,
+        typer.Option(help="Rank-blinded CSV worksheet written outside committed evidence."),
+    ] = DEFAULT_LABEL_WORKSHEET_PATH,
+) -> None:
+    """Pool BM25 results and authored seeds into a blinded labelling worksheet."""
+
+    try:
+        evidence = _build_evaluation_pool(config_path=config, worksheet_path=worksheet)
+    except (CorpusIntegrityError, EvaluationDataError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@evaluation_app.command("import-labels")
+def evaluation_import_labels(
+    worksheet: Annotated[
+        Path,
+        typer.Argument(help="Completed rank-blinded CSV worksheet."),
+    ],
+    config: Annotated[
+        Path,
+        typer.Option(help="Versioned retrieval-evaluation configuration."),
+    ] = DEFAULT_EVALUATION_CONFIG_PATH,
+) -> None:
+    """Validate a completed worksheet and write canonical qrel JSONL."""
+
+    try:
+        evidence = _import_evaluation_labels(config_path=config, worksheet_path=worksheet)
+    except (CorpusIntegrityError, EvaluationDataError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@evaluation_app.command("validate")
+def evaluation_validate(
+    config: Annotated[
+        Path,
+        typer.Option(help="Versioned retrieval-evaluation configuration."),
+    ] = DEFAULT_EVALUATION_CONFIG_PATH,
+) -> None:
+    """Cross-check query, qrel, pool, snapshot, and live skill identities."""
+
+    try:
+        evidence = _validate_evaluation_files(config_path=config)
+    except (CorpusIntegrityError, EvaluationDataError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@evaluation_app.command("bm25")
+def evaluation_bm25(
+    split: Annotated[
+        EvaluationSplit,
+        typer.Option(help="Frozen query split to evaluate."),
+    ] = EvaluationSplit.DEVELOPMENT,
+    allow_test: Annotated[
+        bool,
+        typer.Option(help="Explicitly unlock the test split for the final method comparison."),
+    ] = False,
+    output: Annotated[
+        Path,
+        typer.Option(help="Canonical JSON evaluation report path."),
+    ] = DEFAULT_DEVELOPMENT_REPORT_PATH,
+    config: Annotated[
+        Path,
+        typer.Option(help="Versioned retrieval-evaluation configuration."),
+    ] = DEFAULT_EVALUATION_CONFIG_PATH,
+) -> None:
+    """Evaluate BM25 while keeping test metrics locked by default."""
+
+    try:
+        evidence = _evaluate_bm25_split(
+            config_path=config,
+            split=split,
+            allow_test=allow_test,
+            output_path=output,
+            git_commit=_current_git_commit(),
+        )
+    except (CorpusIntegrityError, EvaluationDataError, ValueError) as error:
         _fail_safely(str(error))
     _print_evidence(evidence)
 
@@ -353,6 +478,224 @@ def _search_bm25(
             for rank, result in enumerate(results, start=1)
         ],
     }
+
+
+def _build_evaluation_pool(
+    *,
+    config_path: Path,
+    worksheet_path: Path,
+) -> dict[str, object]:
+    evaluation_config = load_evaluation_config(config_path)
+    query_set, query_set_sha256 = _load_frozen_query_set(evaluation_config)
+    index, _ = _load_evaluation_index(evaluation_config)
+    pool = build_bm25_candidate_pool(
+        index,
+        query_set,
+        query_set_path=evaluation_config.query_set_path,
+        query_set_sha256=query_set_sha256,
+        pool_depth=evaluation_config.pool_depth,
+    )
+    pool_path = Path(evaluation_config.candidate_pool_path)
+    write_candidate_pool(pool_path, pool)
+    serialized_pool = serialize_candidate_pool(pool)
+    pool_sha256 = sha256_bytes(serialized_pool)
+    write_label_worksheet(
+        worksheet_path,
+        pool,
+        query_set,
+        candidate_pool_sha256=pool_sha256,
+    )
+    serialized_worksheet = worksheet_path.read_bytes()
+    return {
+        "operation": "evaluation_pool",
+        "query_set_path": evaluation_config.query_set_path,
+        "query_set_sha256": query_set_sha256,
+        "query_count": query_set.header.query_count,
+        "development_count": query_set.header.development_count,
+        "test_count": query_set.header.test_count,
+        "candidate_pool_path": pool_path.as_posix(),
+        "candidate_pool_sha256": pool_sha256,
+        "candidate_count": pool.header.item_count,
+        "pool_depth": pool.header.pool_depth,
+        "worksheet_path": worksheet_path.as_posix(),
+        "worksheet_sha256": sha256_bytes(serialized_worksheet),
+        "worksheet_bytes": len(serialized_worksheet),
+        "rank_blinded": True,
+        "test_metrics_computed": False,
+    }
+
+
+def _import_evaluation_labels(
+    *,
+    config_path: Path,
+    worksheet_path: Path,
+) -> dict[str, object]:
+    evaluation_config = load_evaluation_config(config_path)
+    query_set, query_set_sha256 = _load_frozen_query_set(evaluation_config)
+    pool, pool_sha256 = _load_frozen_candidate_pool(evaluation_config, query_set_sha256)
+    qrels = qrels_from_label_worksheet(
+        worksheet_path,
+        pool,
+        query_set,
+        query_set_path=evaluation_config.query_set_path,
+        candidate_pool_path=evaluation_config.candidate_pool_path,
+        candidate_pool_sha256=pool_sha256,
+    )
+    index, _ = _load_evaluation_index(evaluation_config)
+    validate_evaluation_dataset(
+        query_set,
+        qrels,
+        query_set_sha256=query_set_sha256,
+        available_documents={
+            document.document_id: document.content_sha256 for document in index.documents
+        },
+    )
+    qrels_path = Path(evaluation_config.qrels_path)
+    write_qrel_set(qrels_path, qrels)
+    serialized_qrels = serialize_qrel_set(qrels)
+    return {
+        "operation": "evaluation_import_labels",
+        "qrels_path": qrels_path.as_posix(),
+        "qrels_sha256": sha256_bytes(serialized_qrels),
+        "query_count": qrels.header.query_count,
+        "judgement_count": qrels.header.judgement_count,
+        "relevant_judgement_count": qrels.header.relevant_judgement_count,
+        "missing_document_ids": 0,
+        "test_metrics_computed": False,
+    }
+
+
+def _validate_evaluation_files(*, config_path: Path) -> dict[str, object]:
+    evaluation_config = load_evaluation_config(config_path)
+    query_set, query_set_sha256 = _load_frozen_query_set(evaluation_config)
+    _, pool_sha256 = _load_frozen_candidate_pool(evaluation_config, query_set_sha256)
+    qrels_path = Path(evaluation_config.qrels_path)
+    qrels = read_qrel_set(qrels_path)
+    serialized_qrels = serialize_qrel_set(qrels)
+    if qrels.header.candidate_pool_sha256 != pool_sha256:
+        raise EvaluationDataError("qrels reference different candidate-pool bytes")
+    index, _ = _load_evaluation_index(evaluation_config)
+    validate_evaluation_dataset(
+        query_set,
+        qrels,
+        query_set_sha256=query_set_sha256,
+        available_documents={
+            document.document_id: document.content_sha256 for document in index.documents
+        },
+    )
+    return {
+        "operation": "evaluation_validate",
+        "query_set_sha256": query_set_sha256,
+        "candidate_pool_sha256": pool_sha256,
+        "qrels_sha256": sha256_bytes(serialized_qrels),
+        "query_count": query_set.header.query_count,
+        "development_count": query_set.header.development_count,
+        "test_count": query_set.header.test_count,
+        "judgement_count": qrels.header.judgement_count,
+        "relevant_judgement_count": qrels.header.relevant_judgement_count,
+        "corpus_document_count": index.document_count,
+        "missing_document_ids": 0,
+        "test_metrics_computed": False,
+    }
+
+
+def _evaluate_bm25_split(
+    *,
+    config_path: Path,
+    split: EvaluationSplit,
+    allow_test: bool,
+    output_path: Path,
+    git_commit: str,
+) -> dict[str, object]:
+    evaluation_config = load_evaluation_config(config_path)
+    query_set, query_set_sha256 = _load_frozen_query_set(evaluation_config)
+    _, pool_sha256 = _load_frozen_candidate_pool(evaluation_config, query_set_sha256)
+    qrels_path = Path(evaluation_config.qrels_path)
+    qrels = read_qrel_set(qrels_path)
+    serialized_qrels = serialize_qrel_set(qrels)
+    qrels_sha256 = sha256_bytes(serialized_qrels)
+    if qrels.header.candidate_pool_sha256 != pool_sha256:
+        raise EvaluationDataError("qrels reference different candidate-pool bytes")
+    index, bm25_config_sha256 = _load_evaluation_index(evaluation_config)
+    validate_evaluation_dataset(
+        query_set,
+        qrels,
+        query_set_sha256=query_set_sha256,
+        available_documents={
+            document.document_id: document.content_sha256 for document in index.documents
+        },
+    )
+    report = evaluate_bm25(
+        index,
+        query_set,
+        qrels,
+        split=split,
+        generated_at=datetime.now(UTC),
+        git_commit=git_commit,
+        query_set_sha256=query_set_sha256,
+        qrels_sha256=qrels_sha256,
+        bm25_config_sha256=bm25_config_sha256,
+        allow_test=allow_test,
+    )
+    write_evaluation_report(output_path, report)
+    serialized_report = serialize_evaluation_report(report)
+    return {
+        "operation": "evaluation_bm25",
+        "split": split.value,
+        "report_path": output_path.as_posix(),
+        "report_sha256": sha256_bytes(serialized_report),
+        "query_count": report.query_count,
+        "ndcg_at_10": report.ndcg_at_10,
+        "mrr_at_10": report.mrr_at_10,
+        "recall_at_10": report.recall_at_10,
+        "failure_examples": [
+            example.model_dump(mode="json") for example in report.failure_examples
+        ],
+    }
+
+
+def _load_frozen_query_set(config: EvaluationConfig) -> tuple[QuerySet, str]:
+    query_set_path = Path(config.query_set_path)
+    query_set = read_query_set(query_set_path)
+    query_set_sha256 = sha256_bytes(serialize_query_set(query_set))
+    if query_set_sha256 != config.query_set_sha256:
+        raise EvaluationDataError("query-set SHA-256 differs from evaluation configuration")
+    if query_set.header.corpus_snapshot_path != config.corpus_snapshot_path:
+        raise EvaluationDataError("query set and evaluation config use different snapshot paths")
+    if query_set.header.corpus_snapshot_sha256 != config.corpus_snapshot_sha256:
+        raise EvaluationDataError("query set and evaluation config use different snapshot bytes")
+    return query_set, query_set_sha256
+
+
+def _load_frozen_candidate_pool(
+    config: EvaluationConfig,
+    query_set_sha256: str,
+) -> tuple[CandidatePool, str]:
+    pool_path = Path(config.candidate_pool_path)
+    pool = read_candidate_pool(pool_path)
+    pool_sha256 = sha256_bytes(serialize_candidate_pool(pool))
+    if pool.header.query_set_sha256 != query_set_sha256:
+        raise EvaluationDataError("candidate pool references different query-set bytes")
+    if pool.header.corpus_snapshot_sha256 != config.corpus_snapshot_sha256:
+        raise EvaluationDataError("candidate pool references different snapshot bytes")
+    if pool.header.pool_depth != config.pool_depth:
+        raise EvaluationDataError("candidate pool depth differs from evaluation configuration")
+    return pool, pool_sha256
+
+
+def _load_evaluation_index(config: EvaluationConfig) -> tuple[BM25Index, str]:
+    bm25_config_path = Path(config.bm25_config_path)
+    bm25_config_bytes = bm25_config_path.read_bytes()
+    bm25_config_sha256 = sha256_bytes(bm25_config_bytes)
+    baseline = load_bm25_config(bm25_config_path)
+    if baseline.corpus_snapshot_path != config.corpus_snapshot_path:
+        raise EvaluationDataError("BM25 and evaluation configs use different snapshot paths")
+    if baseline.corpus_snapshot_sha256 != config.corpus_snapshot_sha256:
+        raise EvaluationDataError("BM25 and evaluation configs use different snapshot bytes")
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        corpus = load_frozen_corpus(session, baseline)
+    return BM25Index(corpus, baseline), bm25_config_sha256
 
 
 def _github_token() -> SecretStr:
