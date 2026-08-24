@@ -1,0 +1,15 @@
+{
+  "b": 0.75,
+  "corpus_snapshot_path": "data/manifests/dataset-snapshot.jsonl",
+  "corpus_snapshot_sha256": "d5f2c2ced677a468862edb25bbb8edea8b05ce63039916bbaeb02c7fb78c6562",
+  "default_top_k": 10,
+  "eligible_validation_statuses": [
+    "valid",
+    "warning"
+  ],
+  "k1": 1.5,
+  "method": "bm25",
+  "repeated_query_terms": "binary",
+  "schema_version": 1,
+  "tokenizer_version": "unicode-nfkc-markdown-v1"
+}

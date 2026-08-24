@@ -38,10 +38,15 @@ from skillscope.ingestion.snapshot import (
     serialize_dataset_snapshot,
     write_dataset_snapshot,
 )
+from skillscope.retrieval.bm25 import BM25Index
+from skillscope.retrieval.config import load_bm25_config
+from skillscope.retrieval.corpus import CorpusIntegrityError, load_frozen_corpus
+from skillscope.retrieval.text import normalize_lexical_text, tokenize
 
 DEFAULT_SEEDS_PATH = Path("data/seeds/repositories.txt")
 DEFAULT_CANDIDATE_MANIFEST_PATH = Path("data/manifests/candidates.jsonl")
 DEFAULT_DATASET_SNAPSHOT_PATH = Path("data/manifests/dataset-snapshot.jsonl")
+DEFAULT_BM25_CONFIG_PATH = Path("config/retrieval/bm25-v1.json")
 
 app = typer.Typer(no_args_is_help=True, help="Operate the SkillScope observatory.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Discover and ingest public skills.")
@@ -63,6 +68,39 @@ def serve(
 ) -> None:
     """Start the development API server."""
     uvicorn.run("skillscope.api.main:app", host=host, port=port, reload=reload)
+
+
+@app.command("search")
+def search_bm25(
+    query: Annotated[
+        str,
+        typer.Argument(help="Lexical query to run against the frozen corpus."),
+    ],
+    top_k: Annotated[
+        int | None,
+        typer.Option(min=1, max=100, help="Maximum results; defaults to the baseline config."),
+    ] = None,
+    config: Annotated[
+        Path,
+        typer.Option(help="Versioned BM25 baseline configuration."),
+    ] = DEFAULT_BM25_CONFIG_PATH,
+    snapshot: Annotated[
+        Path | None,
+        typer.Option(help="Optional snapshot path override, still checked against its saved hash."),
+    ] = None,
+) -> None:
+    """Search the frozen corpus with deterministic, explained BM25 ranking."""
+
+    try:
+        evidence = _search_bm25(
+            query=query,
+            top_k=top_k,
+            config_path=config,
+            snapshot_path=snapshot,
+        )
+    except (CorpusIntegrityError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
 
 
 @ingest_app.command("discover")
@@ -261,6 +299,59 @@ async def _run_candidate_manifest(
         "skipped_count": summary.skipped_count,
         "error_count": summary.error_count,
         "failures": failures,
+    }
+
+
+def _search_bm25(
+    *,
+    query: str,
+    top_k: int | None,
+    config_path: Path,
+    snapshot_path: Path | None,
+) -> dict[str, object]:
+    baseline = load_bm25_config(config_path)
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        corpus = load_frozen_corpus(session, baseline, snapshot_path=snapshot_path)
+    index = BM25Index(corpus, baseline)
+    results = index.search(query, top_k=top_k)
+    return {
+        "operation": "search",
+        "method": baseline.method,
+        "query": query,
+        "normalized_query": normalize_lexical_text(query),
+        "query_terms": list(dict.fromkeys(tokenize(query))),
+        "snapshot_path": corpus.snapshot_path,
+        "snapshot_sha256": corpus.snapshot_sha256,
+        "corpus_size": index.document_count,
+        "average_document_length": index.average_document_length,
+        "k1": baseline.k1,
+        "b": baseline.b,
+        "results": [
+            {
+                "rank": rank,
+                "document_id": result.document.document_id,
+                "skill_id": str(result.document.skill_id),
+                "repository": result.document.repository_full_name,
+                "path": result.document.path,
+                "name": result.document.name,
+                "snippet": result.document.safe_snippet,
+                "validation_status": result.document.validation_status.value,
+                "score": result.score,
+                "matched_terms": list(result.matched_terms),
+                "term_scores": [
+                    {
+                        "term": term.term,
+                        "term_frequency": term.term_frequency,
+                        "document_frequency": term.document_frequency,
+                        "inverse_document_frequency": term.inverse_document_frequency,
+                        "score": term.score,
+                    }
+                    for term in result.term_scores
+                ],
+            }
+            for rank, result in enumerate(results, start=1)
+        ],
     }
 
 

@@ -1,0 +1,6 @@
+# Five human-reviewed Milestone 6 smoke queries. These are not qrels.
+create and edit spreadsheets
+build an MCP server
+generate presentation slides
+process PDF documents
+test a frontend web application
