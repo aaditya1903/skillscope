@@ -68,7 +68,7 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 123 passing locally
+- Backend tests: 133 passing locally
 - Backend coverage: 95%
 - Database integration tests: 7 passing
 - Parser core tests: 10 passing
@@ -78,9 +78,13 @@ not the user interface.
 - GitHub REST transport tests: 30 passing
 - GitHub endpoint tests: 26 passing
 - Total GitHub payload and client tests: 84 passing
-- Ruff formatting: passing across 52 files
+- Deterministic discovery tests: 10 passing
+- Discovery seeds: 1 checked-in public repository identifier
+- Discovery queries: 4 deterministic seed-first and broad code-search queries
+- Discovery candidate handling: public-only filtering, repository-ID/path deduplication, stable sorting and conflict detection verified
+- Ruff formatting: passing across 54 files
 - Ruff linting: passing
-- Strict mypy: passing across 25 source files
+- Strict mypy: passing across 26 source files
 - CLI version command: 0.1.0
 - API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
@@ -107,8 +111,8 @@ not the user interface.
 - Retrieval evaluation: not started
 - Private GitHub repository: aaditya1903/skillscope
 - Latest pushed GitHub Actions workflow: passing
-- Latest CI-verified commit: `bea3e644e3a1982f1bc6fd9694e65ef56c617e91`
-- Latest verified CI run: [32678982754](https://github.com/aaditya1903/skillscope/actions/runs/32678982754)
+- Latest CI-verified commit: `385d83fc639bebd40165134df2f7a39564e21c43`
+- Latest verified CI run: [32688116615](https://github.com/aaditya1903/skillscope/actions/runs/32688116615)
 
 ## Decisions
 
@@ -124,6 +128,7 @@ not the user interface.
 | Represent non-native enums with explicit named CHECK constraints | Preserves Python enum validation while allowing Alembic 1.19 to compare the constraints accurately | 2026-08-23 | Not required |
 | Pin GitHub REST requests to version `2026-03-10` | Live contents response confirmed the selected version; explicit versioning prevents silent API drift | 2026-08-23 | Not required |
 | Bound fetched skill files and directory metadata | Limits memory use and keeps untrusted GitHub responses within explicit ingestion constraints | 2026-08-24 | Not required |
+| Deduplicate discovered skills by GitHub repository ID and path | Repository IDs remain stable across renames while the path identifies the file within a repository | 2026-08-24 | Not required |
 
 ## Blockers
 
@@ -131,6 +136,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Implement deterministic GitHub discovery queries and checked-in public seed repositories.
-2. Deduplicate and sort candidates, then generate a manifest containing queries, page boundaries, repository IDs, paths and content SHAs.
-3. Test discovery without live CI calls, run one authenticated local manifest smoke test and document GitHub search limitations.
+1. Implement deterministic JSONL candidate-manifest serialization with run metadata and atomic writes.
+2. Add manifest schema validation, byte-for-byte determinism and round-trip tests.
+3. Run one authenticated local discovery to create and inspect a small manifest, then document discovery limitations and close Milestone 4.
