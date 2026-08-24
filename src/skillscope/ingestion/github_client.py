@@ -6,23 +6,29 @@ import asyncio
 import json
 import logging
 import random
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from typing import Literal
+from urllib.parse import quote, urlencode, urljoin
 from uuid import uuid4
 
 import httpx
-from pydantic import BaseModel, SecretStr, ValidationError
+from pydantic import BaseModel, SecretStr, TypeAdapter, ValidationError
 
 from skillscope import __version__
 from skillscope.ingestion.models import (
+    GitHubCodeSearchResponsePayload,
+    GitHubDirectoryEntryPayload,
+    GitHubFilePayload,
     GitHubRateLimitResponsePayload,
     GitHubRepositoryPayload,
 )
 from skillscope.ingestion.rate_limit import GitHubRateLimitSnapshot
 from skillscope.ingestion.validation import (
+    validate_git_ref,
     validate_github_api_url,
     validate_owner,
+    validate_relative_path,
     validate_repository_name,
 )
 
@@ -37,6 +43,14 @@ MAX_CONFIGURED_ATTEMPTS = 5
 MAX_CONFIGURED_CONCURRENCY = 20
 MAX_CONFIGURED_RETRY_DELAY_SECONDS = 300.0
 MAX_CONFIGURED_TIMEOUT_SECONDS = 120.0
+MAX_CODE_SEARCH_PAGES = 10
+MAX_CODE_SEARCH_QUERY_CHARACTERS = 256
+MAX_CODE_SEARCH_RESULTS = 1_000
+MAX_DIRECTORY_ENTRIES = 1_000
+MAX_DIRECTORY_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_ETAG_BYTES = 512
+MAX_SKILL_FILE_RESPONSE_BYTES = 384 * 1024
+MAX_SKILL_FILE_SIZE_BYTES = 256 * 1024
 
 _RETRYABLE_SERVER_STATUSES = frozenset({500, 502, 503, 504})
 _REDIRECT_STATUSES = frozenset({301, 302, 307, 308})
@@ -45,10 +59,13 @@ logger = logging.getLogger(__name__)
 
 Sleep = Callable[[float], Awaitable[None]]
 RandomSource = Callable[[], float]
+_DIRECTORY_ENTRIES_ADAPTER: TypeAdapter[tuple[GitHubDirectoryEntryPayload, ...]] = TypeAdapter(
+    tuple[GitHubDirectoryEntryPayload, ...]
+)
 
 
 @dataclass(frozen=True, slots=True)
-class GitHubResponse[PayloadT: BaseModel]:
+class GitHubResponse[PayloadT]:
     """Validated payload plus safe response metadata."""
 
     data: PayloadT
@@ -56,6 +73,17 @@ class GitHubResponse[PayloadT: BaseModel]:
     etag: str | None
     rate_limit: GitHubRateLimitSnapshot
     correlation_id: str
+    next_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GitHubNotModifiedResponse:
+    """Metadata returned when a conditional GitHub request receives HTTP 304."""
+
+    etag: str | None
+    rate_limit: GitHubRateLimitSnapshot
+    correlation_id: str
+    status_code: Literal[304] = 304
 
 
 class GitHubClientError(RuntimeError):
@@ -99,6 +127,10 @@ class GitHubResponseError(GitHubClientError):
 
 class GitHubPayloadError(GitHubClientError):
     """A successful response did not match the expected schema."""
+
+
+class GitHubPayloadTooLargeError(GitHubClientError):
+    """A GitHub payload exceeded a configured ingestion safety bound."""
 
 
 class GitHubTransportError(GitHubClientError):
@@ -170,6 +202,178 @@ class GitHubClient:
             GitHubRepositoryPayload,
         )
 
+    async def search_skill_files(
+        self,
+        query: str,
+        *,
+        page: int = 1,
+        per_page: int = 100,
+    ) -> GitHubResponse[GitHubCodeSearchResponsePayload]:
+        """Return one validated GitHub code-search page for a bounded query."""
+        query = self._validate_search_query(query)
+        self._validate_search_page(page=page, per_page=per_page)
+        parameters = urlencode({"q": query, "page": page, "per_page": per_page})
+        return await self._get_model(
+            f"/search/code?{parameters}",
+            GitHubCodeSearchResponsePayload,
+        )
+
+    async def iter_skill_file_pages(
+        self,
+        query: str,
+        *,
+        per_page: int = 100,
+        max_pages: int = MAX_CODE_SEARCH_PAGES,
+    ) -> AsyncIterator[GitHubResponse[GitHubCodeSearchResponsePayload]]:
+        """Yield bounded search pages by following GitHub's validated next links."""
+        if not 1 <= max_pages <= MAX_CODE_SEARCH_PAGES:
+            raise ValueError(f"max_pages must be in the range 1-{MAX_CODE_SEARCH_PAGES}")
+
+        response = await self.search_skill_files(query, per_page=per_page)
+        seen_next_urls: set[str] = set()
+        for page_index in range(max_pages):
+            yield response
+            if response.next_url is None or page_index + 1 == max_pages:
+                return
+            if response.next_url in seen_next_urls:
+                raise GitHubResponseError(
+                    "GitHub returned a cyclic pagination link",
+                    correlation_id=response.correlation_id,
+                    status_code=response.status_code,
+                    rate_limit=response.rate_limit,
+                )
+            seen_next_urls.add(response.next_url)
+            response = await self._get_model(
+                response.next_url,
+                GitHubCodeSearchResponsePayload,
+            )
+
+    async def get_file(
+        self,
+        owner: str,
+        repository: str,
+        path: str,
+        ref: str,
+        *,
+        etag: str | None = None,
+    ) -> GitHubResponse[GitHubFilePayload] | GitHubNotModifiedResponse:
+        """Fetch one bounded repository file, optionally using a saved ETag."""
+        endpoint = self._contents_endpoint(owner, repository, path, ref)
+        etag = self._validate_etag(etag) if etag is not None else None
+        correlation_id = uuid4().hex
+        response = await self._request(
+            endpoint,
+            correlation_id=correlation_id,
+            etag=etag,
+            allow_not_modified=etag is not None,
+        )
+        rate_limit = GitHubRateLimitSnapshot.from_headers(response.headers)
+        response_etag = response.headers.get("etag", etag)
+        if response.status_code == 304:
+            return GitHubNotModifiedResponse(
+                etag=response_etag,
+                rate_limit=rate_limit,
+                correlation_id=correlation_id,
+            )
+
+        self._enforce_response_size(
+            response,
+            maximum_bytes=MAX_SKILL_FILE_RESPONSE_BYTES,
+            correlation_id=correlation_id,
+            rate_limit=rate_limit,
+        )
+        payload = self._validate_model_payload(
+            response,
+            GitHubFilePayload,
+            correlation_id=correlation_id,
+            rate_limit=rate_limit,
+        )
+        if payload.size > MAX_SKILL_FILE_SIZE_BYTES:
+            raise GitHubPayloadTooLargeError(
+                f"GitHub file exceeds the {MAX_SKILL_FILE_SIZE_BYTES}-byte safety limit",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            )
+        try:
+            decoded_size = len(payload.decode_content())
+        except ValueError:
+            raise GitHubPayloadError(
+                "GitHub file content was not valid Base64",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            ) from None
+        if decoded_size != payload.size:
+            raise GitHubPayloadError(
+                "GitHub file size did not match its decoded content",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            )
+
+        return GitHubResponse(
+            data=payload,
+            status_code=response.status_code,
+            etag=response_etag,
+            rate_limit=rate_limit,
+            correlation_id=correlation_id,
+        )
+
+    async def list_directory(
+        self,
+        owner: str,
+        repository: str,
+        path: str,
+        ref: str,
+    ) -> GitHubResponse[tuple[GitHubDirectoryEntryPayload, ...]]:
+        """Return bounded metadata for one repository directory without recursion."""
+        endpoint = self._contents_endpoint(
+            owner,
+            repository,
+            path,
+            ref,
+            allow_root=True,
+        )
+        correlation_id = uuid4().hex
+        response = await self._request(endpoint, correlation_id=correlation_id)
+        rate_limit = GitHubRateLimitSnapshot.from_headers(response.headers)
+        self._enforce_response_size(
+            response,
+            maximum_bytes=MAX_DIRECTORY_RESPONSE_BYTES,
+            correlation_id=correlation_id,
+            rate_limit=rate_limit,
+        )
+        raw_payload = self._decode_json_payload(
+            response,
+            correlation_id=correlation_id,
+            rate_limit=rate_limit,
+        )
+        try:
+            entries = _DIRECTORY_ENTRIES_ADAPTER.validate_python(raw_payload)
+        except ValidationError:
+            raise GitHubPayloadError(
+                "GitHub directory response did not match the expected schema",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            ) from None
+        if len(entries) > MAX_DIRECTORY_ENTRIES:
+            raise GitHubPayloadTooLargeError(
+                f"GitHub directory exceeds the {MAX_DIRECTORY_ENTRIES}-entry safety limit",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            )
+
+        return GitHubResponse(
+            data=entries,
+            status_code=response.status_code,
+            etag=response.headers.get("etag"),
+            rate_limit=rate_limit,
+            correlation_id=correlation_id,
+        )
+
     async def _get_model[PayloadT: BaseModel](
         self,
         endpoint: str,
@@ -178,26 +382,12 @@ class GitHubClient:
         correlation_id = uuid4().hex
         response = await self._request(endpoint, correlation_id=correlation_id)
         rate_limit = GitHubRateLimitSnapshot.from_headers(response.headers)
-
-        try:
-            raw_payload = response.json()
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            raise GitHubPayloadError(
-                "GitHub returned malformed JSON",
-                correlation_id=correlation_id,
-                status_code=response.status_code,
-                rate_limit=rate_limit,
-            ) from None
-
-        try:
-            payload = payload_type.model_validate(raw_payload)
-        except ValidationError:
-            raise GitHubPayloadError(
-                "GitHub response did not match the expected schema",
-                correlation_id=correlation_id,
-                status_code=response.status_code,
-                rate_limit=rate_limit,
-            ) from None
+        payload = self._validate_model_payload(
+            response,
+            payload_type,
+            correlation_id=correlation_id,
+            rate_limit=rate_limit,
+        )
 
         return GitHubResponse(
             data=payload,
@@ -205,11 +395,23 @@ class GitHubClient:
             etag=response.headers.get("etag"),
             rate_limit=rate_limit,
             correlation_id=correlation_id,
+            next_url=self._next_link(
+                response,
+                correlation_id=correlation_id,
+                rate_limit=rate_limit,
+            ),
         )
 
-    async def _request(self, endpoint: str, *, correlation_id: str) -> httpx.Response:
+    async def _request(
+        self,
+        endpoint: str,
+        *,
+        correlation_id: str,
+        etag: str | None = None,
+        allow_not_modified: bool = False,
+    ) -> httpx.Response:
         url = validate_github_api_url(urljoin(f"{GITHUB_API_BASE_URL}/", endpoint.lstrip("/")))
-        headers = self._request_headers()
+        headers = self._request_headers(etag=etag)
 
         for attempt in range(1, self._max_attempts + 1):
             logger.debug(
@@ -251,7 +453,7 @@ class GitHubClient:
                     "rate_limit_resource": rate_limit.resource,
                 },
             )
-            if response.is_success:
+            if response.is_success or (allow_not_modified and response.status_code == 304):
                 return response
 
             response_error = self._response_error(
@@ -314,13 +516,162 @@ class GitHubClient:
             status_code=response.status_code,
         )
 
-    def _request_headers(self) -> dict[str, str]:
-        return {
+    def _request_headers(self, *, etag: str | None = None) -> dict[str, str]:
+        headers = {
             "Accept": "application/vnd.github+json",
             "Authorization": self._authorization,
             "User-Agent": f"SkillScope/{__version__}",
             "X-GitHub-Api-Version": GITHUB_API_VERSION,
         }
+        if etag is not None:
+            headers["If-None-Match"] = etag
+        return headers
+
+    @staticmethod
+    def _validate_search_query(query: str) -> str:
+        if query != query.strip() or not query:
+            raise ValueError("search query must be non-empty and have no surrounding whitespace")
+        if len(query) > MAX_CODE_SEARCH_QUERY_CHARACTERS:
+            raise ValueError(
+                f"search query must not exceed {MAX_CODE_SEARCH_QUERY_CHARACTERS} characters"
+            )
+        if any(ord(character) < 32 or ord(character) == 127 for character in query):
+            raise ValueError("search query contains a control character")
+        return query
+
+    @staticmethod
+    def _validate_search_page(*, page: int, per_page: int) -> None:
+        if not 1 <= per_page <= 100:
+            raise ValueError("per_page must be in the range 1-100")
+        if page < 1 or (page - 1) * per_page >= MAX_CODE_SEARCH_RESULTS:
+            raise ValueError("page falls outside GitHub's first 1,000 search results")
+
+    @staticmethod
+    def _validate_etag(etag: str) -> str:
+        if etag != etag.strip() or not etag:
+            raise ValueError("ETag must be non-empty and have no surrounding whitespace")
+        if len(etag.encode("utf-8")) > MAX_ETAG_BYTES:
+            raise ValueError(f"ETag must not exceed {MAX_ETAG_BYTES} bytes")
+        if any(ord(character) < 32 or ord(character) == 127 for character in etag):
+            raise ValueError("ETag contains a control character")
+        return etag
+
+    @staticmethod
+    def _contents_endpoint(
+        owner: str,
+        repository: str,
+        path: str,
+        ref: str,
+        *,
+        allow_root: bool = False,
+    ) -> str:
+        owner = validate_owner(owner)
+        repository = validate_repository_name(repository)
+        ref = validate_git_ref(ref)
+        if not path and allow_root:
+            path_suffix = ""
+        else:
+            path = validate_relative_path(path)
+            path_suffix = f"/{quote(path, safe='/')}"
+        parameters = urlencode({"ref": ref})
+        return f"/repos/{owner}/{repository}/contents{path_suffix}?{parameters}"
+
+    def _validate_model_payload[PayloadT: BaseModel](
+        self,
+        response: httpx.Response,
+        payload_type: type[PayloadT],
+        *,
+        correlation_id: str,
+        rate_limit: GitHubRateLimitSnapshot,
+    ) -> PayloadT:
+        raw_payload = self._decode_json_payload(
+            response,
+            correlation_id=correlation_id,
+            rate_limit=rate_limit,
+        )
+        try:
+            return payload_type.model_validate(raw_payload)
+        except ValidationError:
+            raise GitHubPayloadError(
+                "GitHub response did not match the expected schema",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            ) from None
+
+    @staticmethod
+    def _decode_json_payload(
+        response: httpx.Response,
+        *,
+        correlation_id: str,
+        rate_limit: GitHubRateLimitSnapshot,
+    ) -> object:
+        try:
+            return response.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise GitHubPayloadError(
+                "GitHub returned malformed JSON",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            ) from None
+
+    @staticmethod
+    def _enforce_response_size(
+        response: httpx.Response,
+        *,
+        maximum_bytes: int,
+        correlation_id: str,
+        rate_limit: GitHubRateLimitSnapshot,
+    ) -> None:
+        if len(response.content) > maximum_bytes:
+            raise GitHubPayloadTooLargeError(
+                f"GitHub response exceeds the {maximum_bytes}-byte safety limit",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            )
+
+    @staticmethod
+    def _next_link(
+        response: httpx.Response,
+        *,
+        correlation_id: str,
+        rate_limit: GitHubRateLimitSnapshot,
+    ) -> str | None:
+        link_header = response.headers.get("link")
+        if link_header is None:
+            return None
+        try:
+            next_link = response.links.get("next")
+        except (KeyError, ValueError):
+            next_link = None
+        if next_link is None:
+            if 'rel="next"' in link_header.casefold():
+                raise GitHubResponseError(
+                    "GitHub returned a malformed pagination link",
+                    correlation_id=correlation_id,
+                    status_code=response.status_code,
+                    rate_limit=rate_limit,
+                )
+            return None
+        next_url = next_link.get("url")
+        if not next_url:
+            raise GitHubResponseError(
+                "GitHub returned a malformed pagination link",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            )
+        try:
+            return validate_github_api_url(next_url)
+        except ValueError:
+            raise GitHubResponseError(
+                "GitHub returned a pagination link outside the allowlisted API host",
+                correlation_id=correlation_id,
+                status_code=response.status_code,
+                rate_limit=rate_limit,
+            ) from None
 
     def _response_error(
         self,

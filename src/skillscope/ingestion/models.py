@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from datetime import UTC, datetime
 from typing import Annotated, Literal, Self
 
@@ -135,6 +137,17 @@ class GitHubFilePayload(GitHubPayload):
         if self.path.rsplit("/", maxsplit=1)[-1] != self.name:
             raise ValueError("file name does not match the final path component")
         return self
+
+    def decode_content(self) -> bytes:
+        """Decode GitHub's line-wrapped Base64 representation strictly."""
+        if self.encoding != "base64" or self.content is None:
+            raise ValueError("file content is not available as Base64")
+        try:
+            encoded = self.content.encode("ascii")
+            compact = b"".join(encoded.splitlines())
+            return base64.b64decode(compact, validate=True)
+        except (binascii.Error, UnicodeEncodeError) as error:
+            raise ValueError("file content is not valid Base64") from error
 
 
 class GitHubDirectoryEntryPayload(GitHubPayload):
