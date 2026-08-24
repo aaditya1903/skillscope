@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 6, BM25 baseline
-- Objective: implement transparent lexical retrieval over the frozen Milestone 5 corpus with deterministic scoring and explanations
-- Exit gate: hand-calculated tests pass; BM25 returns sensible results for at least five manual queries; empty and unseen queries are handled; stale snapshot detection works; baseline configuration is saved
+- Milestone: 7, relevance judgements and baseline evaluation
+- Objective: create frozen development and test queries with qrels, then evaluate BM25 using independently verified ranking metrics
+- Exit gate: query and qrel files validate; no qrel references missing skill IDs; metric formulas pass known examples; BM25 development metrics and failure examples are saved; no test queries are used for tuning
 - Status: active
 
 ## P0 release checklist
@@ -30,7 +30,7 @@ not the user interface.
 - [x] Safe Agent Skills parser and validation
 - [x] PostgreSQL/pgvector schema and migrations
 - [x] Frozen dataset snapshot
-- [ ] BM25 implementation and tests
+- [x] BM25 implementation and tests
 - [ ] Labelled queries and qrels
 - [ ] Dense retrieval
 - [ ] Hybrid RRF retrieval
@@ -68,9 +68,9 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 174 passing locally and in CI
-- Backend coverage: 88%
-- PostgreSQL-backed integration tests: 13 passing
+- Backend tests: 200 passing locally and in CI
+- Latest explicitly recorded backend coverage: 88% before the Milestone 6 additions; CI coverage collection remains passing
+- PostgreSQL-backed integration tests: 17 passing
 - Parser core tests: 11 passing
 - Parser structural-signal tests: 10 passing
 - Total parser tests: 21 passing
@@ -93,6 +93,7 @@ not the user interface.
 - Repository-root skill handling: safe root `SKILL.md` paths are retained with an explicit `root_directory_name_unverified` warning
 - Milestone 4 exit gate: complete
 - Milestone 5 exit gate: complete
+- Milestone 6 exit gate: complete
 - Live candidate manifest: `data/manifests/candidates.jsonl`
 - Frozen dataset snapshot: `data/manifests/dataset-snapshot.jsonl`
 - Snapshot source commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -111,9 +112,19 @@ not the user interface.
 - Manifest/database reconciliation: candidate, item, stored-skill and repository counts verified
 - Frozen-evidence safety: candidate manifest and dataset snapshot are token-free and upstream-body-free
 - Discovery limitations: documented in `docs/discovery.md`; results are a reproducible sample, not a complete census
-- Ruff formatting: passing across 67 files
+- BM25 frozen corpus: 144 valid or warning-status skills with an average document length of 1,142.22 tokens
+- BM25 parameters: `k1 = 1.5`, `b = 0.75`, binary repeated-query-term weighting and no stemming or stop-word removal
+- BM25 test additions: 20 text-processing, configuration and ranking unit tests; 2 CLI tests; 4 PostgreSQL corpus-integrity tests
+- BM25 hand calculations: IDF, term contribution and length normalization match independent reference calculations
+- BM25 edge cases: empty queries, unseen terms, duplicate documents, Unicode technical tokens, bounded top-k and deterministic ties verified
+- BM25 stale-corpus protection: snapshot, candidate-manifest, stored-content and validation-status drift verified
+- BM25 manual review: all 5 smoke queries returned a clearly relevant skill within the top 5
+- BM25 direct-intent ranks across the 5 smoke queries: 2, 1, 2, 5 and 1
+- BM25 qualitative limitation: unweighted term frequency and document-length effects can rank adjacent document tools or broadly matching skills above the most literal skill; the PDF query was the weakest case
+- BM25 CLI: deterministic JSON results expose matched terms and per-term score components without returning skill bodies
+- Ruff formatting: passing across 77 files
 - Ruff linting: passing
-- Strict mypy: passing across 30 source files
+- Strict mypy: passing across 35 source files
 - CLI version command: 0.1.0
 - API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
@@ -135,11 +146,13 @@ not the user interface.
 - GitHub contents conditional request: HTTP 304 verified using ETag in live and mocked tests
 - GitHub content safety bounds: 256 KiB files, 1,000 directory entries and strict Base64 validation
 - GitHub REST API version: 2026-03-10
-- Retrieval evaluation: not started
+- Formal retrieval evaluation: Milestone 7 active; smoke queries are not qrels and were not used to tune BM25
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
 - Milestone 5 implementation CI run: [32766779848](https://github.com/aaditya1903/skillscope/actions/runs/32766779848)
+- Milestone 6 implementation commit: `c71aa40f388c88aa7fe9d5c8124c8fca52228d3d`
+- Milestone 6 implementation CI run: [32777591410](https://github.com/aaditya1903/skillscope/actions/runs/32777591410)
 
 ## Decisions
 
@@ -161,6 +174,9 @@ not the user interface.
 | Treat repository-root `SKILL.md` as safe but parent-name-unverifiable | GitHub repository-relative paths do not encode the local clone directory name, so root files receive an explicit warning while nested paths retain strict validation | 2026-08-24 | Not required |
 | Isolate integration tests with transactional baseline cleanup | Tests must remain deterministic even after legitimate live evidence has populated the isolated test database | 2026-08-24 | Not required |
 | Freeze 200 candidate outcomes and use 144 valid or warning-status skills for retrieval | Preserves truthful validation evidence while keeping invalid records out of the evaluated retrieval corpus | 2026-08-24 | Not required |
+| Use ordinary unweighted BM25 with binary repeated-query-term weighting | Keeps the first lexical baseline transparent and prevents repeated query words from silently multiplying their influence | 2026-08-24 | Not required |
+| Keep stop words and avoid stemming in the initial BM25 baseline | Preserves a reproducible untuned baseline whose weaknesses can be measured against labelled development queries | 2026-08-24 | Not required |
+| Do not tune BM25 on the five manual smoke queries | The smoke review checks basic usefulness; parameter choices must wait for the frozen development split to avoid informal overfitting | 2026-08-24 | Not required |
 
 ## Blockers
 
@@ -168,6 +184,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Implement a frozen-corpus loader that selects the 144 valid or warning-status skills and rejects stale manifest/database hashes.
-2. Define documented text normalisation and tokenisation, then implement BM25 with hand-calculated unit tests.
-3. Add deterministic ranking explanations, a CLI search command, saved baseline parameters and five manual-query checks.
+1. Write the relevance-labelling guide and freeze 20 to 30 realistic queries into development and test splits.
+2. Pool BM25 candidates, label qrels against valid frozen skill IDs and validate every reference.
+3. Implement and hand-test nDCG@10, MRR@10 and Recall@10, then save BM25 development metrics and failure examples without inspecting test metrics for tuning.

@@ -86,3 +86,29 @@ explanations. It never returns or commits third-party skill bodies.
 The five Milestone 6 human-review queries live in
 `data/evaluation/bm25-smoke-queries.txt`. They are exploratory smoke checks, not
 relevance judgements or qrels; formal labelling begins in Milestone 7.
+
+## Milestone 6 manual review
+
+The five smoke queries were reviewed against the 144-document frozen corpus
+using `k1 = 1.5`, `b = 0.75` and snapshot SHA-256
+`d5f2c2ced677a468862edb25bbb8edea8b05ce63039916bbaeb02c7fb78c6562`.
+Every query returned a clearly relevant skill within the top five:
+
+| Query | Directly intent-aligned result | Rank | Observation |
+|---|---|---:|---|
+| create and edit spreadsheets | `anthropics/skills:skills/xlsx/SKILL.md` | 2 | `docx` ranked first because it matched all four query terms more strongly |
+| build an MCP server | `Scottcjn/iota-agent-mcp:SKILL.md` | 1 | The most literal MCP-server candidate ranked first |
+| generate presentation slides | `anthropics/skills:skills/pptx/SKILL.md` | 2 | `theme-factory` ranked first and is also presentation-relevant |
+| process PDF documents | `anthropics/skills:skills/pdf/SKILL.md` | 5 | The weakest case; broader skills repeated `pdf` and `documents` more often |
+| test a frontend web application | `anthropics/skills:skills/webapp-testing/SKILL.md` | 1 | The intended web-application testing skill ranked first |
+
+This passes the qualitative Milestone 6 gate while exposing a useful baseline
+failure mode: ordinary unweighted BM25 can reward repeated general terms and
+document-length effects over the most literal skill name. Stop-word removal,
+field weighting and parameter changes were not introduced after this review.
+Those choices must be evaluated only on the frozen Milestone 7 development
+queries, never on the test split or these five hand-selected smoke queries.
+
+The verified implementation commit is
+`c71aa40f388c88aa7fe9d5c8124c8fca52228d3d`, with successful GitHub Actions run
+[32777591410](https://github.com/aaditya1903/skillscope/actions/runs/32777591410).
