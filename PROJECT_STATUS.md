@@ -20,7 +20,7 @@ not the user interface.
 ## Current milestone
 
 - Milestone: 4, GitHub client and discovery
-- Objective: implement deterministic GitHub discovery and reproducible candidate manifest output using the verified read-only client
+- Objective: complete live candidate-manifest verification and document the limits of the reproducible GitHub discovery sample
 - Exit gate: client tests pass without network access; one authenticated smoke test discovers real public candidates; tokens never appear in logs; the candidate manifest records exact queries and identifiers; discovery limitations are documented
 - Status: active
 
@@ -68,8 +68,8 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 133 passing locally
-- Backend coverage: 95%
+- Backend tests: 149 passing locally
+- Backend coverage: 93%
 - Database integration tests: 7 passing
 - Parser core tests: 10 passing
 - Parser structural-signal tests: 10 passing
@@ -82,9 +82,14 @@ not the user interface.
 - Discovery seeds: 1 checked-in public repository identifier
 - Discovery queries: 4 deterministic seed-first and broad code-search queries
 - Discovery candidate handling: public-only filtering, repository-ID/path deduplication, stable sorting and conflict detection verified
-- Ruff formatting: passing across 54 files
+- Candidate manifest tests: 16 passing
+- Candidate manifest module coverage: 83%
+- Candidate manifest format: versioned canonical UTF-8 JSONL recording run metadata, exact queries, page boundaries and candidate identifiers
+- Candidate manifest determinism: byte-for-byte serialization and validated read/write round trips verified
+- Candidate manifest safety: atomic replacement preserves prior files on failure; upstream skill bodies are excluded
+- Ruff formatting: passing across 56 files
 - Ruff linting: passing
-- Strict mypy: passing across 26 source files
+- Strict mypy: passing across 27 source files
 - CLI version command: 0.1.0
 - API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
@@ -111,8 +116,8 @@ not the user interface.
 - Retrieval evaluation: not started
 - Private GitHub repository: aaditya1903/skillscope
 - Latest pushed GitHub Actions workflow: passing
-- Latest CI-verified commit: `385d83fc639bebd40165134df2f7a39564e21c43`
-- Latest verified CI run: [32688116615](https://github.com/aaditya1903/skillscope/actions/runs/32688116615)
+- Latest CI-verified commit: `d93db5aebba32a675f29876f10c35023276ec834`
+- Latest verified CI run: [32692787489](https://github.com/aaditya1903/skillscope/actions/runs/32692787489)
 
 ## Decisions
 
@@ -129,6 +134,7 @@ not the user interface.
 | Pin GitHub REST requests to version `2026-03-10` | Live contents response confirmed the selected version; explicit versioning prevents silent API drift | 2026-08-23 | Not required |
 | Bound fetched skill files and directory metadata | Limits memory use and keeps untrusted GitHub responses within explicit ingestion constraints | 2026-08-24 | Not required |
 | Deduplicate discovered skills by GitHub repository ID and path | Repository IDs remain stable across renames while the path identifies the file within a repository | 2026-08-24 | Not required |
+| Store candidate manifests as canonical versioned JSONL | Supports deterministic diffs, streaming validation and reproducible discovery evidence without committing upstream bodies | 2026-08-24 | Not required |
 
 ## Blockers
 
@@ -136,6 +142,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Implement deterministic JSONL candidate-manifest serialization with run metadata and atomic writes.
-2. Add manifest schema validation, byte-for-byte determinism and round-trip tests.
-3. Run one authenticated local discovery to create and inspect a small manifest, then document discovery limitations and close Milestone 4.
+1. Run one bounded authenticated discovery and write a small candidate manifest.
+2. Inspect the manifest for exact queries, page boundaries, identifiers and absence of upstream bodies or secrets.
+3. Document GitHub Code Search caps and indexing limitations, then close Milestone 4.
