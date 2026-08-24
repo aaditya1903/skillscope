@@ -33,7 +33,7 @@ Run bounded discovery from the checked-in seed list:
 
 ```bash
 uv run skillscope ingest discover \
-  --target-skills 100 \
+  --target-skills 200 \
   --seeds data/seeds/repositories.txt \
   --output data/manifests/candidates.jsonl
 ```
@@ -162,3 +162,38 @@ reproducible from the committed file.
 The snapshot freezes the retrieval corpus for later BM25, dense and hybrid
 comparisons. Re-running ingestion does not silently change an already evaluated
 snapshot.
+
+## Verified Milestone 5 snapshot
+
+The frozen Milestone 5 evidence was generated from implementation commit
+`0aba78808db36a40c79d5b272a929b1fb8ab4de0`, verified by GitHub Actions run
+[32766779848](https://github.com/aaditya1903/skillscope/actions/runs/32766779848).
+
+The candidate manifest contains 200 unique candidate identities across 169
+public repositories. It is 95,331 bytes with SHA-256
+`4da341401d807ea9f7436ffb98637f8fb6200afe6b7dbc2e396be2bd2663d8ee`.
+
+The final dataset snapshot contains 200 reconciled outcomes. It is 77,770 bytes
+with SHA-256
+`d5f2c2ced677a468862edb25bbb8edea8b05ce63039916bbaeb02c7fb78c6562`.
+The corresponding clean database contains 169 repositories and 157 stored
+skills across 135 represented repositories.
+
+The frozen retrieval corpus consists of 144 skills: 51 with `valid` status and
+93 with `warning` status. The remaining 13 stored skills are explicitly invalid
+and stay in the observatory as validation evidence, but retrieval baselines must
+exclude them.
+
+The first run produced 144 `ingested` and 56 `invalid` outcomes, with no skips
+or errors. The identical rerun produced 157 `unchanged` and 43 `invalid`
+outcomes, again with no skips or errors. Thirteen first-run invalid candidates
+had usable frontmatter and were stored with their invalid status, so their
+unchanged Git blob SHAs were correctly skipped on the rerun. This explains the
+change in outcome counts without hiding validation failures or creating
+duplicates.
+
+Both committed manifests are canonical, token-free and free of upstream skill
+bodies. Candidate, run-item, stored-skill and repository counts reconcile with
+PostgreSQL. The manifests freeze identifiers, hashes, validation state and safe
+failure evidence only; PostgreSQL remains the source of truth for parsed skill
+content.
