@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 7, relevance judgements and baseline evaluation
-- Objective: freeze the evaluation contract, generate a rank-blinded candidate pool, and complete human qrel labelling before running development-only BM25 metrics
-- Exit gate: query and qrel files validate; no qrel references missing skill IDs; metric formulas pass known examples; BM25 development metrics and failure examples are saved; no test queries are used for tuning
+- Milestone: 8, dense and hybrid retrieval
+- Objective: add reproducible local embeddings, exact pgvector dense retrieval, and RRF hybrid fusion, then compare methods on development queries without unlocking the test split
+- Exit gate: the embedding model, revision and dimensionality are pinned; embeddings are tied to content hashes; dense and hybrid retrieval pass deterministic tests; development metrics and trade-offs are documented; the frozen test split is used exactly once after configuration is fixed
 - Status: active
 
 ## P0 release checklist
@@ -31,10 +31,10 @@ not the user interface.
 - [x] PostgreSQL/pgvector schema and migrations
 - [x] Frozen dataset snapshot
 - [x] BM25 implementation and tests
-- [ ] Labelled queries and qrels
+- [x] Labelled queries and qrels
 - [ ] Dense retrieval
 - [ ] Hybrid RRF retrieval
-- [ ] nDCG@10, MRR@10 and Recall@10 evaluation
+- [x] nDCG@10, MRR@10 and Recall@10 evaluation
 - [ ] Versioned FastAPI endpoints
 - [ ] Minimal React/TypeScript search, detail and statistics interface
 - [ ] Unit and integration tests
@@ -155,6 +155,15 @@ not the user interface.
 - Evaluation metrics implemented: macro nDCG@10, MRR@10 and Recall@10 with graded gain and hand-calculated unit tests
 - Evaluation leakage protection: test metrics require an explicit unlock and remain prohibited until the final Milestone 8 comparison
 - Milestone 7 Batch 1 tests: 53 query-contract, qrel-validation, pooling, worksheet-safety, metric, report and CLI tests
+- Frozen qrels: 482 complete judgements across all 24 queries, comprising 435 grade-0, 21 grade-1 and 26 grade-2 judgements
+- Qrel provenance: rank- and split-blinded AI-assisted pre-annotations reviewed by the project author before import; every relevant judgement includes a rationale
+- Qrels SHA-256: `e437c04690c5c6de5dd8b777d8290c77b6a5ce49a1889c10ea5dc7718a32eecc`
+- Qrel integrity: all 482 stable document IDs and content hashes resolve against the frozen 144-skill corpus; every query has at least one relevant judgement
+- BM25 development evaluation: 16 queries, nDCG@10 `0.8159700661`, MRR@10 `0.9131944444` and judged-pool Recall@10 `0.8500000000`
+- BM25 development failure examples: `q008` first relevant result at rank 9; `q009` missed 1 of 3 relevant pooled items; `q005` retrieved 3 of 5 relevant pooled items in the top 10
+- Evaluation limitation: Recall@10 measures recall over the judged BM25-plus-seed pool, not unknown relevant skills outside that pool
+- Test-split discipline: all 8 test queries have frozen judgements, but no test metrics have been computed or inspected
+- Milestone 7 exit gate: complete
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -189,13 +198,15 @@ not the user interface.
 | Use stable repository-ID/path document identifiers with content hashes in qrels | Database UUIDs can change after clean ingestion, while repository IDs, paths and frozen hashes remain portable and drift-detectable | 2026-08-25 | Not required |
 | Blind candidate ranks during relevance labelling | Prevents the labeller from treating BM25 order as ground truth while retaining full pooling provenance separately | 2026-08-25 | Not required |
 | Lock test metrics behind an explicit release flag | Keeps embedding and hybrid configuration decisions restricted to development evidence | 2026-08-25 | Not required |
+| Use AI-assisted blinded pre-annotations with explicit author review | Reduces manual transcription while preserving accountable human acceptance of every positive or partial relevance decision | 2026-08-25 | Not required |
+| Report Recall@10 as judged-pool recall | The BM25-plus-seed pool is reproducible but cannot establish relevance for unjudged documents outside the pool | 2026-08-25 | Not required |
 
 ## Blockers
 
-Human relevance judgements are required after the deterministic candidate pool is generated.
+No active blockers.
 
 ## Next three actions
 
-1. Generate the canonical BM25-plus-seed candidate pool and rank-blinded CSV worksheet.
-2. Label every pooled candidate using the documented 0-to-2 relevance scale, then import and validate canonical qrels.
-3. Run BM25 on development queries only and save aggregate metrics plus deterministic failure examples.
+1. Pin a local embedding model, revision, dimensionality and deterministic text-construction contract.
+2. Populate content-hash-bound embeddings and implement exact pgvector dense retrieval with deterministic tests.
+3. Implement RRF hybrid retrieval, compare BM25, dense and hybrid on development queries, then freeze configuration before the one final test-split run.

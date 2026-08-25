@@ -1,6 +1,6 @@
 # Retrieval evaluation and relevance labelling
 
-SkillScope evaluates retrieval against frozen, manually judged information
+SkillScope evaluates retrieval against frozen, author-reviewed information
 needs. The evaluation files are canonical evidence, not convenient caches: a
 changed byte, stale content hash, missing skill identity, modified worksheet
 field, or unintentional test run must fail before a metric is reported.
@@ -94,6 +94,23 @@ immutable worksheet fields are unchanged, every query has a positive
 judgement, and every stable document ID plus content hash resolves against the
 frozen corpus.
 
+### Version 1 judgement provenance
+
+The version 1 worksheet contains 482 complete judgements: 435 grade 0, 21
+grade 1, and 26 grade 2. An AI assistant drafted conservative pre-annotations
+from only the rank- and split-blinded worksheet fields. The project author then
+reviewed every proposed grade 1 and grade 2 decision and its rationale before
+allowing the import. The canonical qrels therefore describe this process as
+AI-assisted and author-reviewed rather than implying that every annotation was
+entered manually from scratch.
+
+The review did not expose BM25 rank, score, pool source, or development/test
+membership. No supporting files were fetched or executed. Every query has at
+least one positive judgement, every relevant judgement has a concise rationale,
+and all 482 stable document identifiers and content hashes resolve against the
+frozen corpus. The canonical qrels SHA-256 is
+`e437c04690c5c6de5dd8b777d8290c77b6a5ce49a1889c10ea5dc7718a32eecc`.
+
 ## Metrics
 
 SkillScope reports macro-averaged nDCG@10, MRR@10, and Recall@10.
@@ -131,6 +148,31 @@ must remain the saved baseline.
 The test command fails unless `--allow-test` is supplied. That flag is reserved
 for the one final BM25, dense, and hybrid comparison in Milestone 8. Test
 metrics must not be inspected while choosing embedding, dense, or RRF settings.
+
+## BM25 development baseline
+
+The frozen BM25 baseline was evaluated on the 16 development queries only:
+
+| Metric | Development result |
+|---|---:|
+| nDCG@10 | 0.8159700661 |
+| MRR@10 | 0.9131944444 |
+| judged-pool Recall@10 | 0.8500000000 |
+
+The three deterministic lowest-performing examples expose useful lexical
+failure modes:
+
+- `q008`, “write a reusable agent skill”: the first relevant result appeared
+  at rank 9 and only 1 of 3 relevant pooled candidates appeared in the top 10;
+- `q009`, “apply company brand colours and typography”: BM25 found a relevant
+  result at rank 1 but retrieved only 2 of 3 relevant pooled candidates; and
+- `q005`, “design a polished responsive landing page”: the first relevant
+  result appeared at rank 2 and only 3 of 5 relevant pooled candidates appeared
+  in the top 10.
+
+These results are a saved baseline, not a parameter-tuning exercise. The eight
+test queries have frozen judgements, but their metrics remain uncomputed until
+the single final Milestone 8 comparison.
 
 ## Limitations
 
