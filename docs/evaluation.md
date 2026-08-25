@@ -216,3 +216,52 @@ therefore means recall over judged pooled candidates, not unknown relevance
 across the entire public GitHub ecosystem. Milestone 8 must report this pooling
 bias alongside the final comparison rather than pretending the qrels are a
 complete census.
+
+<!-- M8_FINAL_COMPARISON_START -->
+## Milestone 8 final method comparison
+
+The retrieval configuration was committed before the locked test split was
+opened. BM25, exact pgvector cosine retrieval, and equal-weight RRF were then
+evaluated together against the same frozen snapshot and qrels. The canonical
+test report was created once by the overwrite-refusing writer; this section was
+generated from the saved reports rather than editing metric values by hand.
+
+| Split | Method | nDCG@10 | MRR@10 | judged-pool Recall@10 | p50 ms | p95 ms |
+|---|---|---:|---:|---:|---:|---:|
+| Development | bm25 | 0.8159700661 | 0.9131944444 | 0.8500000000 | 0.649 | 1.048 |
+| Development | dense | 0.8778725187 | 0.9375000000 | 0.8937500000 | 16.721 | 71.556 |
+| Development | hybrid | 0.8777519964 | 0.9166666667 | 0.9875000000 | 17.841 | 24.408 |
+| Test | bm25 | 0.8363377669 | 0.8750000000 | 0.8750000000 | 0.584 | 0.958 |
+| Test | dense | 0.8273775132 | 0.9062500000 | 0.8541666667 | 14.203 | 20.448 |
+| Test | hybrid | 0.7788241976 | 0.8125000000 | 0.8750000000 | 13.331 | 14.783 |
+
+On the development split, the highest nDCG@10 was produced by `dense`;
+on the locked test split it was produced by `bm25`.
+BM25 remains the transparent no-model baseline. Dense retrieval adds semantic
+matching at model-loading and query-encoding cost. Hybrid RRF combines lexical
+and semantic ranks without pretending their raw score scales are comparable.
+The measured latency values describe this local CPU/PostgreSQL run, not a hosted
+service-level objective.
+
+Deterministic failure examples:
+
+- Development `bm25`: `q008` (first relevant result below rank 3), `q009` (relevant pool items missed), `q005` (relevant pool items missed).
+- Development `dense`: `q010` (no relevant result in top 10), `q005` (relevant pool items missed), `q003` (relative ordering error).
+- Development `hybrid`: `q008` (relative ordering error), `q010` (relative ordering error), `q009` (relative ordering error).
+- Test `bm25`: `q020` (no relevant result in top 10), `q022` (relative ordering error), `q023` (relative ordering error).
+- Test `dense`: `q022` (first relevant result below rank 3), `q024` (relative ordering error), `q023` (relevant pool items missed).
+- Test `hybrid`: `q020` (no relevant result in top 10), `q022` (relative ordering error), `q024` (relative ordering error).
+
+Development report: `reports/evaluation/method-comparison-development-v1.json`
+(SHA-256 `bb49125eeb0ec693cd95d42325a3019e375a71c4981c8bb1eca5eeb4a0af211c`, 181,083 bytes).
+Test report: `reports/evaluation/method-comparison-test-v1.json`
+(SHA-256 `6967f552d2afd4f94b34a5daea036d5d6669f0ae51635616f4a22a7e6e359088`, 92,909 bytes).
+Both reports contain safe ranked metadata and scores only; no upstream body or
+credential is stored.
+
+The Recall@10 values remain judged-pool recall. The pool was built from BM25
+top-20 results plus pre-authored seeds, so unknown relevant documents outside
+that pool are not counted. The 144-document GitHub sample and local latency
+measurements should not be generalized to a complete marketplace or production
+deployment.
+<!-- M8_FINAL_COMPARISON_END -->

@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 8, dense and hybrid retrieval
-- Objective: add reproducible local embeddings, exact pgvector dense retrieval, and RRF hybrid fusion, then compare methods on development queries without unlocking the test split
-- Exit gate: the embedding model, revision and dimensionality are pinned; embeddings are tied to content hashes; dense and hybrid retrieval pass deterministic tests; development metrics and trade-offs are documented; the frozen test split is used exactly once after configuration is fixed
+- Milestone: 9, versioned retrieval API
+- Objective: expose the frozen BM25, exact dense and hybrid retrieval services through safe versioned FastAPI endpoints
+- Exit gate: liveness and readiness differ; all three modes, filters and explanations work; invalid requests and missing skills return typed errors; no secret, body or stack trace leaks; OpenAPI matches runtime responses
 - Status: active
 
 ## P0 release checklist
@@ -32,8 +32,8 @@ not the user interface.
 - [x] Frozen dataset snapshot
 - [x] BM25 implementation and tests
 - [x] Labelled queries and qrels
-- [ ] Dense retrieval
-- [ ] Hybrid RRF retrieval
+- [x] Dense retrieval
+- [x] Hybrid RRF retrieval
 - [x] nDCG@10, MRR@10 and Recall@10 evaluation
 - [ ] Versioned FastAPI endpoints
 - [ ] Minimal React/TypeScript search, detail and statistics interface
@@ -68,9 +68,9 @@ not the user interface.
 
 - Development platform: macOS 26.0.1 arm64
 - Python runtime: 3.12.14
-- Backend tests: 253 passing in the full Milestone 7 Batch 1 local quality gate
-- Latest explicitly recorded backend coverage: 88% before the Milestone 6 additions; CI coverage collection remains passing
-- PostgreSQL-backed integration tests: 17 passing
+- Backend tests: 289 passing in the full Milestone 8 local quality gate
+- Backend coverage: 84% in the full Milestone 8 local quality gate
+- PostgreSQL-backed integration tests: 20 passing
 - Parser core tests: 11 passing
 - Parser structural-signal tests: 10 passing
 - Total parser tests: 21 passing
@@ -122,14 +122,14 @@ not the user interface.
 - BM25 direct-intent ranks across the 5 smoke queries: 2, 1, 2, 5 and 1
 - BM25 qualitative limitation: unweighted term frequency and document-length effects can rank adjacent document tools or broadly matching skills above the most literal skill; the PDF query was the weakest case
 - BM25 CLI: deterministic JSON results expose matched terms and per-term score components without returning skill bodies
-- Ruff formatting: passing across 92 files
+- Ruff formatting: passing across 105 files
 - Ruff linting: passing
-- Strict mypy: passing across 41 source files
+- Strict mypy: passing across 46 source files
 - CLI version command: 0.1.0
 - API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
 - Vector extension: pgvector 0.8.6
-- Migration head: ddfda2ba04bd
+- Migration head: 8c0d2f64a1b7
 - Migration round trip: base -> head -> base -> head passing
 - Alembic migration drift: no new upgrade operations detected
 - Alembic logging isolation: existing application loggers remain enabled during migration-backed workflows
@@ -146,7 +146,7 @@ not the user interface.
 - GitHub contents conditional request: HTTP 304 verified using ETag in live and mocked tests
 - GitHub content safety bounds: 256 KiB files, 1,000 directory entries and strict Base64 validation
 - GitHub REST API version: 2026-03-10
-- Formal retrieval evaluation: Milestone 7 active; smoke queries are not qrels and were not used to tune BM25
+- Formal retrieval evaluation: BM25, exact dense and hybrid RRF development/test comparison complete
 - Frozen evaluation queries: 24 total, comprising 16 development and 8 locked test queries
 - Evaluation query provenance: canonical JSONL tied to the frozen dataset snapshot SHA-256
 - Evaluation pooling design: union of BM25 top-20 results and pre-authored query seeds, with deterministic rank- and split-blinded worksheet ordering
@@ -162,8 +162,28 @@ not the user interface.
 - BM25 development evaluation: 16 queries, nDCG@10 `0.8159700661`, MRR@10 `0.9131944444` and judged-pool Recall@10 `0.8500000000`
 - BM25 development failure examples: `q008` first relevant result at rank 9; `q009` missed 1 of 3 relevant pooled items; `q005` retrieved 3 of 5 relevant pooled items in the top 10
 - Evaluation limitation: Recall@10 measures recall over the judged BM25-plus-seed pool, not unknown relevant skills outside that pool
-- Test-split discipline: all 8 test queries have frozen judgements, but no test metrics have been computed or inspected
+- Test-split discipline: configuration and code were frozen before one final three-method test comparison; the canonical test report refuses overwrite
 - Milestone 7 exit gate: complete
+<!-- M8_VERIFIED_METRICS_START -->
+- Milestone 8 exit gate: complete
+- Dense/hybrid retrieval configuration SHA-256: `75a447cfa29f7a072805224f95c998be6e045f011e4f5642ca01d247fa4c12d3`
+- Embedding model: `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`
+- Embedding runtime: sentence-transformers `6.0.0`, CPU, 384 dimensions and unit normalization
+- Embedding coverage: 144 of 144 frozen retrieval-eligible skills with complete content/config/model provenance
+- Dense retrieval: exact pgvector cosine distance with no ANN index
+- Hybrid retrieval: equal-weight reciprocal rank fusion over top-50 BM25 and dense candidates with `k = 60`
+- Development comparison report: `reports/evaluation/method-comparison-development-v1.json`; SHA-256 `bb49125eeb0ec693cd95d42325a3019e375a71c4981c8bb1eca5eeb4a0af211c`
+- Final test comparison report: `reports/evaluation/method-comparison-test-v1.json`; SHA-256 `6967f552d2afd4f94b34a5daea036d5d6669f0ae51635616f4a22a7e6e359088`
+- Development `bm25`: nDCG@10 `0.8159700661`, MRR@10 `0.9131944444`, judged-pool Recall@10 `0.8500000000`, p50 `0.649` ms and p95 `1.048` ms
+- Development `dense`: nDCG@10 `0.8778725187`, MRR@10 `0.9375000000`, judged-pool Recall@10 `0.8937500000`, p50 `16.721` ms and p95 `71.556` ms
+- Development `hybrid`: nDCG@10 `0.8777519964`, MRR@10 `0.9166666667`, judged-pool Recall@10 `0.9875000000`, p50 `17.841` ms and p95 `24.408` ms
+- Final test `bm25`: nDCG@10 `0.8363377669`, MRR@10 `0.8750000000`, judged-pool Recall@10 `0.8750000000`, p50 `0.584` ms and p95 `0.958` ms
+- Final test `dense`: nDCG@10 `0.8273775132`, MRR@10 `0.9062500000`, judged-pool Recall@10 `0.8541666667`, p50 `14.203` ms and p95 `20.448` ms
+- Final test `hybrid`: nDCG@10 `0.7788241976`, MRR@10 `0.8125000000`, judged-pool Recall@10 `0.8750000000`, p50 `13.331` ms and p95 `14.783` ms
+- Retrieval comparison safety: development/test inputs match; reports are token-free and upstream-body-free
+- Milestone 8 implementation commit: `5c3407f2649fd23448361623355b68decfc88a9c`
+- Milestone 8 implementation CI run: [32799235688](https://github.com/aaditya1903/skillscope/actions/runs/32799235688)
+<!-- M8_VERIFIED_METRICS_END -->
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -211,6 +231,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Pin a local embedding model, revision, dimensionality and deterministic text-construction contract.
-2. Populate content-hash-bound embeddings and implement exact pgvector dense retrieval with deterministic tests.
-3. Implement RRF hybrid retrieval, compare BM25, dense and hybrid on development queries, then freeze configuration before the one final test-split run.
+1. Add `/api/v1` response models, structured errors, liveness and database-aware readiness.
+2. Inject frozen retrieval services and expose BM25, dense and hybrid search with bounded filters and score explanations.
+3. Add API integration, leakage and OpenAPI contract tests before documenting the versioned surface.
