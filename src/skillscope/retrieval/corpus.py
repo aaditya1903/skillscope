@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from skillscope.db.enums import ValidationStatus
+from skillscope.db.enums import LicenseStatus, ValidationStatus
 from skillscope.db.models import Repository, Skill
 from skillscope.ingestion.snapshot import DatasetSnapshotItem, read_dataset_snapshot
 from skillscope.retrieval.config import BM25BaselineConfig
@@ -67,6 +67,28 @@ class CorpusDocument:
     content_sha256: str
     fields: LexicalFields
     tokens: tuple[str, ...]
+    license_status: LicenseStatus = LicenseStatus.UNKNOWN
+    has_scripts: bool = False
+
+    @property
+    def embedding_text(self) -> str:
+        """Return the labelled, versioned dense-retrieval input text."""
+
+        return "\n".join(
+            (
+                f"name: {self.fields.name_text}",
+                f"description: {self.fields.description_text}",
+                f"metadata: {self.fields.metadata_text}",
+                f"headings: {self.fields.heading_text}",
+                f"body: {self.fields.body_text}",
+            )
+        )
+
+    @property
+    def embedding_text_sha256(self) -> str:
+        """Bind stored embeddings to the exact UTF-8 model input."""
+
+        return hashlib.sha256(self.embedding_text.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +141,7 @@ def load_frozen_corpus(
         select(
             Repository.github_repository_id,
             Repository.full_name,
+            Repository.license_status,
             Skill.id,
             Skill.path,
             Skill.content_sha256,
@@ -131,12 +154,13 @@ def load_frozen_corpus(
             Skill.body_text,
             Skill.safe_snippet,
             Skill.validation_status,
+            Skill.has_scripts,
         )
         .join(Skill, Skill.repository_id == Repository.id)
         .where(Repository.github_repository_id.in_(repository_ids))
     )
     rows = session.execute(statement).tuples().all()
-    row_by_identity = {(row[0], row[3]): row for row in rows}
+    row_by_identity = {(row[0], row[4]): row for row in rows}
 
     documents: list[CorpusDocument] = []
     for item in eligible_items:
@@ -148,6 +172,7 @@ def load_frozen_corpus(
         (
             repository_id,
             repository_full_name,
+            license_status,
             skill_id,
             path,
             content_sha256,
@@ -160,6 +185,7 @@ def load_frozen_corpus(
             body_text,
             safe_snippet,
             validation_status,
+            has_scripts,
         ) = row
         _validate_database_row(
             item,
@@ -189,6 +215,8 @@ def load_frozen_corpus(
                 content_sha256=content_sha256,
                 fields=fields,
                 tokens=tokenize(fields.combined_text),
+                license_status=license_status,
+                has_scripts=has_scripts,
             )
         )
 

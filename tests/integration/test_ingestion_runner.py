@@ -366,6 +366,11 @@ async def test_changed_sha_updates_the_existing_skill(db_session: Session) -> No
     assert skills[0].git_blob_sha == "3" * 40
     assert skills[0].description == "Version two."
     assert skills[0].embedding is None
+    assert skills[0].embedding_model_id is None
+    assert skills[0].embedding_model_revision is None
+    assert skills[0].embedding_config_sha256 is None
+    assert skills[0].embedding_content_sha256 is None
+    assert skills[0].embedding_text_sha256 is None
     assert skills[0].indexed_at is None
 
 

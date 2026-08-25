@@ -1,0 +1,29 @@
+{
+  "batch_size": 16,
+  "bm25_config_path": "config/retrieval/bm25-v1.json",
+  "bm25_config_sha256": "e8426ee8fb5b5ec37f14160248009c0527f349a849966f64b6d2ab833665e7d2",
+  "corpus_snapshot_path": "data/manifests/dataset-snapshot.jsonl",
+  "corpus_snapshot_sha256": "d5f2c2ced677a468862edb25bbb8edea8b05ce63039916bbaeb02c7fb78c6562",
+  "default_top_k": 10,
+  "dense_weight": 1.0,
+  "device": "cpu",
+  "distance": "cosine",
+  "eligible_validation_statuses": [
+    "valid",
+    "warning"
+  ],
+  "exact_search": true,
+  "max_sequence_length": 256,
+  "method": "dense_hybrid",
+  "model_dimension": 384,
+  "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+  "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "normalize_embeddings": true,
+  "rrf_candidate_depth": 50,
+  "rrf_k": 60,
+  "schema_version": 1,
+  "sentence_transformers_version": "6.0.0",
+  "bm25_weight": 1.0,
+  "text_version": "labelled-retrieval-fields-v1",
+  "trust_remote_code": false
+}

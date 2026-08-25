@@ -213,6 +213,11 @@ def upsert_skill(
         "search_text": _search_text(parsed),
         "safe_snippet": _safe_snippet(parsed.frontmatter.description),
         "embedding": None,
+        "embedding_model_id": None,
+        "embedding_model_revision": None,
+        "embedding_config_sha256": None,
+        "embedding_content_sha256": None,
+        "embedding_text_sha256": None,
         "validation_status": parsed.validation_status,
         "validation_messages_json": [
             message.model_dump(mode="json") for message in parsed.validation_messages

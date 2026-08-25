@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from skillscope.retrieval.config import BM25BaselineConfig
 from skillscope.retrieval.corpus import CorpusDocument, FrozenCorpus, StaleCorpusError
+from skillscope.retrieval.filters import RetrievalFilters
 from skillscope.retrieval.text import tokenize
 
 
@@ -76,7 +77,13 @@ class BM25Index:
         if snapshot_sha256 != self.snapshot_sha256:
             raise StaleCorpusError("BM25 index was built from a different corpus snapshot")
 
-    def search(self, query: str, *, top_k: int | None = None) -> tuple[BM25Result, ...]:
+    def search(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        filters: RetrievalFilters | None = None,
+    ) -> tuple[BM25Result, ...]:
         """Rank documents for one query using binary repeated-term semantics."""
 
         result_limit = top_k if top_k is not None else self.config.default_top_k
@@ -89,6 +96,14 @@ class BM25Index:
         if not query_terms:
             return ()
 
+        allowed_document_ids = (
+            None
+            if filters is None
+            else frozenset(
+                document.document_id for document in self.documents if filters.allows(document)
+            )
+        )
+
         scores: dict[int, float] = defaultdict(float)
         components: dict[int, list[BM25TermScore]] = defaultdict(list)
         for term in query_terms:
@@ -98,6 +113,11 @@ class BM25Index:
             document_frequency = len(term_postings)
             inverse_document_frequency = self.inverse_document_frequency(term)
             for document_index, term_frequency in term_postings:
+                if (
+                    allowed_document_ids is not None
+                    and self.documents[document_index].document_id not in allowed_document_ids
+                ):
+                    continue
                 component = self._term_score(
                     term_frequency=term_frequency,
                     document_length=self.document_lengths[document_index],

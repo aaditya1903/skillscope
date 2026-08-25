@@ -1,5 +1,6 @@
 """PostgreSQL and pgvector integration coverage for the persistence layer."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -55,6 +56,7 @@ def _skill(
 ) -> Skill:
     """Build a synthetic skill without relying on third-party content."""
 
+    has_embedding = embedding is not None
     skill = Skill(
         path=path,
         html_url=f"https://github.com/skillscope-tests/catalogue/blob/main/{path}",
@@ -72,9 +74,14 @@ def _skill(
         search_text="synthetic database integration skill",
         safe_snippet="Synthetic skill used for database integration tests.",
         embedding=embedding,
+        embedding_model_id=("sentence-transformers/all-MiniLM-L6-v2" if has_embedding else None),
+        embedding_model_revision="a" * 40 if has_embedding else None,
+        embedding_config_sha256="c" * 64 if has_embedding else None,
+        embedding_content_sha256="b" * 64 if has_embedding else None,
+        embedding_text_sha256="d" * 64 if has_embedding else None,
         validation_status=ValidationStatus.VALID,
         validation_messages_json=[],
-        indexed_at=None,
+        indexed_at=datetime(2030, 1, 1, tzinfo=UTC) if has_embedding else None,
     )
 
     if repository is not None:

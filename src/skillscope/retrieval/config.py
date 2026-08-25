@@ -1,4 +1,4 @@
-"""Strict configuration for the reproducible BM25 baseline."""
+"""Strict configuration for reproducible lexical, dense, and hybrid retrieval."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from skillscope.retrieval.text import TOKENIZER_VERSION
 
 MAX_BASELINE_CONFIG_BYTES = 64 * 1024
+MAX_DENSE_HYBRID_CONFIG_BYTES = 64 * 1024
 
 
 class BM25BaselineConfig(BaseModel):
@@ -53,3 +54,72 @@ def load_bm25_config(path: Path) -> BM25BaselineConfig:
         return BM25BaselineConfig.model_validate(decoded)
     except (UnicodeDecodeError, json.JSONDecodeError, ValidationError) as error:
         raise ValueError("BM25 configuration is invalid") from error
+
+
+class DenseHybridConfig(BaseModel):
+    """Pinned model, corpus, exact-search, and RRF configuration."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    method: Literal["dense_hybrid"] = "dense_hybrid"
+    model_id: Literal["sentence-transformers/all-MiniLM-L6-v2"]
+    model_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    sentence_transformers_version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
+    model_dimension: Literal[384] = 384
+    max_sequence_length: Literal[256] = 256
+    normalize_embeddings: Literal[True] = True
+    device: Literal["cpu"] = "cpu"
+    trust_remote_code: Literal[False] = False
+    text_version: Literal["labelled-retrieval-fields-v1"] = "labelled-retrieval-fields-v1"
+    batch_size: int = Field(ge=1, le=128)
+    distance: Literal["cosine"] = "cosine"
+    exact_search: Literal[True] = True
+    default_top_k: int = Field(ge=1, le=50)
+    rrf_candidate_depth: Literal[50] = 50
+    rrf_k: Literal[60] = 60
+    bm25_weight: float = Field(gt=0.0, le=10.0)
+    dense_weight: float = Field(gt=0.0, le=10.0)
+    corpus_snapshot_path: str = Field(min_length=1)
+    corpus_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    bm25_config_path: str = Field(min_length=1)
+    bm25_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    eligible_validation_statuses: tuple[Literal["valid", "warning"], ...]
+
+    @model_validator(mode="after")
+    def validate_retrieval_contract(self) -> DenseHybridConfig:
+        _validate_safe_relative_path(self.corpus_snapshot_path, suffix=".jsonl")
+        _validate_safe_relative_path(self.bm25_config_path, suffix=".json")
+        if self.eligible_validation_statuses != ("valid", "warning"):
+            raise ValueError("dense retrieval must use the frozen valid and warning corpus")
+        if self.default_top_k > self.rrf_candidate_depth:
+            raise ValueError("default_top_k cannot exceed the RRF candidate depth")
+        return self
+
+
+def load_dense_hybrid_config(path: Path) -> DenseHybridConfig:
+    """Load one bounded, strict, versioned dense/hybrid configuration."""
+
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        raise ValueError(f"dense/hybrid configuration could not be read: {path}") from error
+    if not payload or len(payload) > MAX_DENSE_HYBRID_CONFIG_BYTES:
+        raise ValueError("dense/hybrid configuration has an invalid size")
+    try:
+        return DenseHybridConfig.model_validate(json.loads(payload))
+    except (UnicodeDecodeError, json.JSONDecodeError, ValidationError) as error:
+        raise ValueError("dense/hybrid configuration is invalid") from error
+
+
+def _validate_safe_relative_path(value: str, *, suffix: str) -> None:
+    path = Path(value)
+    if (
+        path.is_absolute()
+        or path.suffix != suffix
+        or ".." in path.parts
+        or not value
+        or value.startswith("./")
+        or path.as_posix() != value
+    ):
+        raise ValueError(f"retrieval path must be a normalized safe relative {suffix} path")

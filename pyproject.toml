@@ -23,6 +23,11 @@ dependencies = [
     "typer>=0.27.1",
 ]
 
+[project.optional-dependencies]
+model = [
+    "sentence-transformers>=6.0.0,<7",
+]
+
 [project.scripts]
 skillscope = "skillscope.cli:main"
 
@@ -64,6 +69,7 @@ addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
 markers = [
     "integration: requires an isolated PostgreSQL database with pgvector",
+    "model: opt-in smoke test that downloads the pinned embedding model",
 ]
 
 [tool.coverage.run]

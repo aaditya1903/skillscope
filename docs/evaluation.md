@@ -174,6 +174,40 @@ These results are a saved baseline, not a parameter-tuning exercise. The eight
 test queries have frozen judgements, but their metrics remain uncomputed until
 the single final Milestone 8 comparison.
 
+## Milestone 8 method-comparison protocol
+
+Development comparison runs BM25, exact dense cosine search, and equal-weight
+RRF against the same 16 queries, 482 qrels, and frozen 144-document snapshot:
+
+```bash
+uv run --extra model skillscope evaluate compare \
+  --split development \
+  --output reports/evaluation/method-comparison-development-v1.json
+```
+
+The report records every input-configuration hash, the exact model revision,
+per-query top-10 safe metadata, source ranks, method metrics, deterministic
+failure examples, and nearest-rank p50/p95 latency after one unmeasured warm-up
+query per method. Latency includes query encoding and PostgreSQL work for dense
+search, and both component retrievals plus fusion for hybrid search.
+
+Model, text construction, cosine distance, candidate depth 50, `rrf_k = 60`,
+and equal weights are fixed before inspecting the test split. After reviewing
+and committing the development report, the final test command is run once with
+an explicit output path and unlock:
+
+```bash
+uv run --extra model skillscope evaluate compare \
+  --split test \
+  --allow-test \
+  --output reports/evaluation/method-comparison-test-v1.json
+```
+
+The test report writer refuses to overwrite an existing final report. The
+single command compares all three methods together, so no method receives a
+different held-out sample. Results are reported honestly even if hybrid does
+not beat BM25.
+
 ## Limitations
 
 The version 1 pool is the union of BM25 top-20 results and pre-authored query

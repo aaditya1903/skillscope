@@ -119,6 +119,27 @@ class Skill(UUIDPrimaryKeyMixin, Base):
             "AND external_link_count >= 0 AND word_count >= 0 AND byte_count >= 0",
             name="counts_nonnegative",
         ),
+        CheckConstraint(
+            "(embedding IS NULL AND embedding_model_id IS NULL "
+            "AND embedding_model_revision IS NULL AND embedding_config_sha256 IS NULL "
+            "AND embedding_content_sha256 IS NULL AND embedding_text_sha256 IS NULL "
+            "AND indexed_at IS NULL) OR "
+            "(embedding IS NOT NULL AND embedding_model_id IS NOT NULL "
+            "AND embedding_model_revision IS NOT NULL AND embedding_config_sha256 IS NOT NULL "
+            "AND embedding_content_sha256 IS NOT NULL AND embedding_text_sha256 IS NOT NULL "
+            "AND indexed_at IS NOT NULL)",
+            name="embedding_provenance_complete",
+        ),
+        CheckConstraint(
+            "(embedding_model_revision IS NULL OR char_length(embedding_model_revision) = 40) "
+            "AND (embedding_config_sha256 IS NULL "
+            "OR char_length(embedding_config_sha256) = 64) "
+            "AND (embedding_content_sha256 IS NULL "
+            "OR char_length(embedding_content_sha256) = 64) "
+            "AND (embedding_text_sha256 IS NULL "
+            "OR char_length(embedding_text_sha256) = 64)",
+            name="embedding_provenance_hash_lengths",
+        ),
         _enum_check_constraint(
             "validation_status",
             ValidationStatus,
@@ -152,6 +173,11 @@ class Skill(UUIDPrimaryKeyMixin, Base):
     search_text: Mapped[str] = mapped_column(Text)
     safe_snippet: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float] | None] = mapped_column(VECTOR(384))
+    embedding_model_id: Mapped[str | None] = mapped_column(String(255))
+    embedding_model_revision: Mapped[str | None] = mapped_column(String(40))
+    embedding_config_sha256: Mapped[str | None] = mapped_column(String(64))
+    embedding_content_sha256: Mapped[str | None] = mapped_column(String(64))
+    embedding_text_sha256: Mapped[str | None] = mapped_column(String(64))
     validation_status: Mapped[ValidationStatus] = mapped_column(
         SAEnum(
             ValidationStatus,

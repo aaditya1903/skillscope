@@ -200,6 +200,10 @@ not the user interface.
 | Lock test metrics behind an explicit release flag | Keeps embedding and hybrid configuration decisions restricted to development evidence | 2026-08-25 | Not required |
 | Use AI-assisted blinded pre-annotations with explicit author review | Reduces manual transcription while preserving accountable human acceptance of every positive or partial relevance decision | 2026-08-25 | Not required |
 | Report Recall@10 as judged-pool recall | The BM25-plus-seed pool is reproducible but cannot establish relevance for unjudged documents outside the pool | 2026-08-25 | Not required |
+| Pin `all-MiniLM-L6-v2` by resolved model revision and retrieval-config hash | Model names and mutable branches are insufficient provenance for reproducible stored embeddings | 2026-08-25 | Not required |
+| Keep the real embedding runtime as an explicit local extra | Deterministic mock-vector tests should keep CI independent of Hugging Face availability and multi-gigabyte PyTorch downloads | 2026-08-25 | Not required |
+| Use exact pgvector cosine search without an ANN index | The 144-document frozen corpus does not justify approximate-search recall loss or operational complexity | 2026-08-25 | Not required |
+| Fuse top-50 BM25 and dense ranks with equal-weight RRF at `k = 60` | Rank fusion avoids adding incomparable lexical and cosine score scales while preserving source-rank explanations | 2026-08-25 | Not required |
 
 ## Blockers
 

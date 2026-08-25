@@ -30,6 +30,20 @@ def test_skill_embedding_dimension_and_deferred_body() -> None:
     assert isinstance(embedding_type, VECTOR)
     assert embedding_type.dim == 384
     assert db_models.Skill.__mapper__.column_attrs["body_text"].deferred is True
+    assert {
+        "embedding_model_id",
+        "embedding_model_revision",
+        "embedding_config_sha256",
+        "embedding_content_sha256",
+        "embedding_text_sha256",
+    } <= set(db_models.Skill.__table__.columns.keys())
+    constraint_names = {
+        constraint.name
+        for constraint in db_models.Skill.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert "ck_skills_embedding_provenance_complete" in constraint_names
+    assert "ck_skills_embedding_provenance_hash_lengths" in constraint_names
 
 
 def test_idempotency_constraints_are_declared() -> None:

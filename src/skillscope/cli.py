@@ -17,8 +17,16 @@ from rich.console import Console
 
 from skillscope import __version__
 from skillscope.core.config import get_settings
-from skillscope.db.enums import EvaluationSplit
+from skillscope.db.enums import EvaluationSplit, RetrievalMethod
 from skillscope.db.session import get_session_factory
+from skillscope.evaluation.comparison import (
+    BM25EvaluationRetriever,
+    DenseEvaluationRetriever,
+    HybridEvaluationRetriever,
+    evaluate_retrieval_methods,
+    serialize_comparison_report,
+    write_comparison_report,
+)
 from skillscope.evaluation.config import EvaluationConfig, load_evaluation_config
 from skillscope.evaluation.data import (
     EvaluationDataError,
@@ -66,8 +74,20 @@ from skillscope.ingestion.snapshot import (
     write_dataset_snapshot,
 )
 from skillscope.retrieval.bm25 import BM25Index
-from skillscope.retrieval.config import load_bm25_config
+from skillscope.retrieval.config import (
+    BM25BaselineConfig,
+    DenseHybridConfig,
+    load_bm25_config,
+    load_dense_hybrid_config,
+)
 from skillscope.retrieval.corpus import CorpusIntegrityError, load_frozen_corpus
+from skillscope.retrieval.dense import DenseRetriever
+from skillscope.retrieval.embeddings import (
+    EmbeddingContractError,
+    get_sentence_transformer_encoder,
+    index_frozen_corpus_embeddings,
+)
+from skillscope.retrieval.hybrid import HybridRetriever
 from skillscope.retrieval.text import normalize_lexical_text, tokenize
 
 DEFAULT_SEEDS_PATH = Path("data/seeds/repositories.txt")
@@ -75,8 +95,13 @@ DEFAULT_CANDIDATE_MANIFEST_PATH = Path("data/manifests/candidates.jsonl")
 DEFAULT_DATASET_SNAPSHOT_PATH = Path("data/manifests/dataset-snapshot.jsonl")
 DEFAULT_BM25_CONFIG_PATH = Path("config/retrieval/bm25-v1.json")
 DEFAULT_EVALUATION_CONFIG_PATH = Path("config/evaluation/evaluation-v1.json")
+DEFAULT_DENSE_HYBRID_CONFIG_PATH = Path("config/retrieval/dense-hybrid-v1.json")
 DEFAULT_LABEL_WORKSHEET_PATH = Path("/tmp/skillscope-m7-labels.csv")
 DEFAULT_DEVELOPMENT_REPORT_PATH = Path("reports/evaluation/bm25-development-v1.json")
+DEFAULT_COMPARISON_DEVELOPMENT_REPORT_PATH = Path(
+    "reports/evaluation/method-comparison-development-v1.json"
+)
+DEFAULT_COMPARISON_TEST_REPORT_PATH = Path("reports/evaluation/method-comparison-test-v1.json")
 
 app = typer.Typer(no_args_is_help=True, help="Operate the SkillScope observatory.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Discover and ingest public skills.")
@@ -84,8 +109,10 @@ evaluation_app = typer.Typer(
     no_args_is_help=True,
     help="Build and run frozen retrieval evaluations.",
 )
+index_app = typer.Typer(no_args_is_help=True, help="Build reproducible retrieval indexes.")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(evaluation_app, name="evaluate")
+app.add_typer(index_app, name="index")
 console = Console()
 
 
@@ -123,17 +150,53 @@ def search_bm25(
         Path | None,
         typer.Option(help="Optional snapshot path override, still checked against its saved hash."),
     ] = None,
+    mode: Annotated[
+        RetrievalMethod,
+        typer.Option(help="Retrieval mode: bm25, dense, or hybrid."),
+    ] = RetrievalMethod.BM25,
+    dense_config: Annotated[
+        Path,
+        typer.Option(help="Pinned dense and hybrid retrieval configuration."),
+    ] = DEFAULT_DENSE_HYBRID_CONFIG_PATH,
 ) -> None:
-    """Search the frozen corpus with deterministic, explained BM25 ranking."""
+    """Search the frozen corpus with lexical, exact dense, or RRF ranking."""
 
     try:
-        evidence = _search_bm25(
-            query=query,
-            top_k=top_k,
-            config_path=config,
-            snapshot_path=snapshot,
-        )
-    except (CorpusIntegrityError, ValueError) as error:
+        if mode is RetrievalMethod.BM25:
+            evidence = _search_bm25(
+                query=query,
+                top_k=top_k,
+                config_path=config,
+                snapshot_path=snapshot,
+            )
+        else:
+            if snapshot is not None:
+                raise ValueError(
+                    "dense and hybrid search use the snapshot pinned in their configuration"
+                )
+            evidence = _search_dense_or_hybrid(
+                query=query,
+                top_k=top_k,
+                mode=mode,
+                config_path=dense_config,
+            )
+    except (CorpusIntegrityError, EmbeddingContractError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@index_app.command("dense")
+def index_dense(
+    config: Annotated[
+        Path,
+        typer.Option(help="Pinned dense and hybrid retrieval configuration."),
+    ] = DEFAULT_DENSE_HYBRID_CONFIG_PATH,
+) -> None:
+    """Populate missing or stale frozen-corpus embeddings in bounded batches."""
+
+    try:
+        evidence = _index_dense_embeddings(config_path=config)
+    except (CorpusIntegrityError, EmbeddingContractError, ValueError) as error:
         _fail_safely(str(error))
     _print_evidence(evidence)
 
@@ -218,6 +281,45 @@ def evaluation_bm25(
     try:
         evidence = _evaluate_bm25_split(
             config_path=config,
+            split=split,
+            allow_test=allow_test,
+            output_path=output,
+            git_commit=_current_git_commit(),
+        )
+    except (CorpusIntegrityError, EvaluationDataError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@evaluation_app.command("compare")
+def evaluation_compare(
+    split: Annotated[
+        EvaluationSplit,
+        typer.Option(help="Frozen query split to compare."),
+    ] = EvaluationSplit.DEVELOPMENT,
+    allow_test: Annotated[
+        bool,
+        typer.Option(help="Explicitly unlock the one final frozen test comparison."),
+    ] = False,
+    output: Annotated[
+        Path,
+        typer.Option(help="Canonical JSON method-comparison report path."),
+    ] = DEFAULT_COMPARISON_DEVELOPMENT_REPORT_PATH,
+    evaluation_config: Annotated[
+        Path,
+        typer.Option(help="Versioned retrieval-evaluation configuration."),
+    ] = DEFAULT_EVALUATION_CONFIG_PATH,
+    retrieval_config: Annotated[
+        Path,
+        typer.Option(help="Pinned dense and hybrid retrieval configuration."),
+    ] = DEFAULT_DENSE_HYBRID_CONFIG_PATH,
+) -> None:
+    """Compare BM25, exact dense, and hybrid RRF on one frozen split."""
+
+    try:
+        evidence = _evaluate_method_comparison(
+            evaluation_config_path=evaluation_config,
+            retrieval_config_path=retrieval_config,
             split=split,
             allow_test=allow_test,
             output_path=output,
@@ -480,6 +582,129 @@ def _search_bm25(
     }
 
 
+def _index_dense_embeddings(*, config_path: Path) -> dict[str, object]:
+    dense_config, dense_config_sha256, baseline, _ = _load_dense_retrieval_config(config_path)
+    encoder = get_sentence_transformer_encoder(dense_config)
+    session_factory = get_session_factory()
+    with session_factory.begin() as session:
+        corpus = load_frozen_corpus(session, baseline)
+        summary = index_frozen_corpus_embeddings(
+            session,
+            corpus,
+            dense_config,
+            encoder,
+            embedding_config_sha256=dense_config_sha256,
+        )
+    return {
+        "operation": "index_dense",
+        "corpus_size": summary.corpus_size,
+        "indexed_count": summary.indexed_count,
+        "unchanged_count": summary.unchanged_count,
+        "model_id": summary.model_id,
+        "model_revision": summary.model_revision,
+        "model_dimension": summary.model_dimension,
+        "normalized": dense_config.normalize_embeddings,
+        "text_version": dense_config.text_version,
+        "embedding_config_sha256": summary.embedding_config_sha256,
+        "corpus_snapshot_sha256": summary.corpus_snapshot_sha256,
+    }
+
+
+def _search_dense_or_hybrid(
+    *,
+    query: str,
+    top_k: int | None,
+    mode: RetrievalMethod,
+    config_path: Path,
+) -> dict[str, object]:
+    if mode not in {RetrievalMethod.DENSE, RetrievalMethod.HYBRID}:
+        raise ValueError("semantic search mode must be dense or hybrid")
+    dense_config, dense_config_sha256, baseline, _ = _load_dense_retrieval_config(config_path)
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        corpus = load_frozen_corpus(session, baseline)
+        encoder = get_sentence_transformer_encoder(dense_config)
+        dense = DenseRetriever(
+            session,
+            corpus,
+            dense_config,
+            encoder,
+            embedding_config_sha256=dense_config_sha256,
+        )
+        result_limit = top_k if top_k is not None else dense_config.default_top_k
+        serialized_results: list[dict[str, object]]
+        if mode is RetrievalMethod.DENSE:
+            results = dense.search(query, top_k=result_limit)
+            serialized_results = [
+                {
+                    "rank": rank,
+                    "document_id": result.document.document_id,
+                    "skill_id": str(result.document.skill_id),
+                    "repository": result.document.repository_full_name,
+                    "path": result.document.path,
+                    "name": result.document.name,
+                    "snippet": result.document.safe_snippet,
+                    "validation_status": result.document.validation_status.value,
+                    "cosine_distance": result.cosine_distance,
+                    "cosine_similarity": result.cosine_similarity,
+                }
+                for rank, result in enumerate(results, start=1)
+            ]
+        else:
+            hybrid = HybridRetriever(BM25Index(corpus, baseline), dense, dense_config)
+            hybrid_results = hybrid.search(query, top_k=result_limit)
+            serialized_results = [
+                {
+                    "rank": rank,
+                    "document_id": result.document.document_id,
+                    "skill_id": str(result.document.skill_id),
+                    "repository": result.document.repository_full_name,
+                    "path": result.document.path,
+                    "name": result.document.name,
+                    "snippet": result.document.safe_snippet,
+                    "validation_status": result.document.validation_status.value,
+                    "fused_score": result.fused_score,
+                    "bm25_rank": result.bm25_rank,
+                    "dense_rank": result.dense_rank,
+                    "bm25_score": result.bm25_score,
+                    "dense_similarity": result.dense_similarity,
+                }
+                for rank, result in enumerate(hybrid_results, start=1)
+            ]
+    return {
+        "operation": "search",
+        "method": mode.value,
+        "query": query,
+        "snapshot_path": baseline.corpus_snapshot_path,
+        "snapshot_sha256": baseline.corpus_snapshot_sha256,
+        "corpus_size": len(corpus.documents),
+        "model_id": dense_config.model_id,
+        "model_revision": dense_config.model_revision,
+        "exact_dense_search": dense_config.exact_search,
+        "rrf_k": dense_config.rrf_k if mode is RetrievalMethod.HYBRID else None,
+        "results": serialized_results,
+    }
+
+
+def _load_dense_retrieval_config(
+    path: Path,
+) -> tuple[DenseHybridConfig, str, BM25BaselineConfig, str]:
+    dense_config_bytes = path.read_bytes()
+    dense_config_sha256 = sha256_bytes(dense_config_bytes)
+    dense_config = load_dense_hybrid_config(path)
+    bm25_path = Path(dense_config.bm25_config_path)
+    bm25_bytes = bm25_path.read_bytes()
+    bm25_sha256 = sha256_bytes(bm25_bytes)
+    if bm25_sha256 != dense_config.bm25_config_sha256:
+        raise ValueError("BM25 configuration bytes differ from the dense configuration")
+    baseline = load_bm25_config(bm25_path)
+    if baseline.corpus_snapshot_path != dense_config.corpus_snapshot_path:
+        raise ValueError("BM25 and dense configurations use different snapshot paths")
+    if baseline.corpus_snapshot_sha256 != dense_config.corpus_snapshot_sha256:
+        raise ValueError("BM25 and dense configurations use different snapshot bytes")
+    return dense_config, dense_config_sha256, baseline, bm25_sha256
+
+
 def _build_evaluation_pool(
     *,
     config_path: Path,
@@ -650,6 +875,116 @@ def _evaluate_bm25_split(
         "recall_at_10": report.recall_at_10,
         "failure_examples": [
             example.model_dump(mode="json") for example in report.failure_examples
+        ],
+    }
+
+
+def _evaluate_method_comparison(
+    *,
+    evaluation_config_path: Path,
+    retrieval_config_path: Path,
+    split: EvaluationSplit,
+    allow_test: bool,
+    output_path: Path,
+    git_commit: str,
+) -> dict[str, object]:
+    if split is EvaluationSplit.TEST:
+        if not allow_test:
+            raise ValueError("the final test comparison requires --allow-test")
+        if output_path != DEFAULT_COMPARISON_TEST_REPORT_PATH:
+            raise ValueError(
+                "the test comparison requires the canonical method-comparison-test-v1 path"
+            )
+        if output_path.exists():
+            raise ValueError("the frozen test comparison report already exists")
+
+    evaluation_config_bytes = evaluation_config_path.read_bytes()
+    evaluation_config_sha256 = sha256_bytes(evaluation_config_bytes)
+    evaluation_config = load_evaluation_config(evaluation_config_path)
+    query_set, query_set_sha256 = _load_frozen_query_set(evaluation_config)
+    _, pool_sha256 = _load_frozen_candidate_pool(evaluation_config, query_set_sha256)
+    qrels = read_qrel_set(Path(evaluation_config.qrels_path))
+    serialized_qrels = serialize_qrel_set(qrels)
+    qrels_sha256 = sha256_bytes(serialized_qrels)
+    if qrels.header.candidate_pool_sha256 != pool_sha256:
+        raise EvaluationDataError("qrels reference different candidate-pool bytes")
+
+    dense_config, dense_config_sha256, baseline, bm25_config_sha256 = _load_dense_retrieval_config(
+        retrieval_config_path
+    )
+    if Path(evaluation_config.bm25_config_path) != Path(dense_config.bm25_config_path):
+        raise EvaluationDataError("evaluation and dense configurations use different BM25 files")
+    if evaluation_config.corpus_snapshot_sha256 != dense_config.corpus_snapshot_sha256:
+        raise EvaluationDataError("evaluation and dense configurations use different snapshots")
+
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        corpus = load_frozen_corpus(session, baseline)
+        validate_evaluation_dataset(
+            query_set,
+            qrels,
+            query_set_sha256=query_set_sha256,
+            available_documents={
+                document.document_id: document.content_sha256 for document in corpus.documents
+            },
+        )
+        bm25 = BM25Index(corpus, baseline)
+        encoder = get_sentence_transformer_encoder(dense_config)
+        dense = DenseRetriever(
+            session,
+            corpus,
+            dense_config,
+            encoder,
+            embedding_config_sha256=dense_config_sha256,
+        )
+        hybrid = HybridRetriever(bm25, dense, dense_config)
+        report = evaluate_retrieval_methods(
+            (
+                BM25EvaluationRetriever(bm25),
+                DenseEvaluationRetriever(dense),
+                HybridEvaluationRetriever(hybrid),
+            ),
+            query_set,
+            qrels,
+            dense_config,
+            split=split,
+            generated_at=datetime.now(UTC),
+            git_commit=git_commit,
+            query_set_sha256=query_set_sha256,
+            qrels_sha256=qrels_sha256,
+            evaluation_config_sha256=evaluation_config_sha256,
+            bm25_config_sha256=bm25_config_sha256,
+            dense_hybrid_config_sha256=dense_config_sha256,
+            allow_test=allow_test,
+        )
+
+    write_comparison_report(
+        output_path,
+        report,
+        refuse_overwrite=split is EvaluationSplit.TEST,
+    )
+    serialized_report = serialize_comparison_report(report)
+    return {
+        "operation": "evaluation_compare",
+        "split": split.value,
+        "report_path": output_path.as_posix(),
+        "report_sha256": sha256_bytes(serialized_report),
+        "query_count": report.methods[0].query_count,
+        "corpus_snapshot_sha256": report.corpus_snapshot_sha256,
+        "dense_hybrid_config_sha256": report.dense_hybrid_config_sha256,
+        "model_id": report.model_id,
+        "model_revision": report.model_revision,
+        "methods": [
+            {
+                "method": method.method.value,
+                "ndcg_at_10": method.ndcg_at_10,
+                "mrr_at_10": method.mrr_at_10,
+                "recall_at_10": method.recall_at_10,
+                "p50_ms": method.latency.p50_ms,
+                "p95_ms": method.latency.p95_ms,
+                "failure_query_ids": [example.query_id for example in method.failure_examples],
+            }
+            for method in report.methods
         ],
     }
 

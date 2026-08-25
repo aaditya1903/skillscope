@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: str = "postgresql+psycopg://skillscope:skillscope@localhost:5432/skillscope"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     frontend_origin: str = "http://localhost:5173"
     github_token: SecretStr | None = None
 

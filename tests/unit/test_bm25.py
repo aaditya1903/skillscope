@@ -1,6 +1,7 @@
 """Hand-calculated and edge-case coverage for deterministic BM25."""
 
 import math
+from dataclasses import replace
 from uuid import UUID
 
 import pytest
@@ -14,6 +15,7 @@ from skillscope.retrieval.corpus import (
     LexicalFields,
     StaleCorpusError,
 )
+from skillscope.retrieval.filters import RetrievalFilters
 from skillscope.retrieval.text import tokenize
 
 SNAPSHOT_SHA256 = "a" * 64
@@ -143,6 +145,16 @@ def test_top_k_is_bounded_and_applied_after_ranking() -> None:
     assert len(index.search("alpha", top_k=1)) == 1
     with pytest.raises(ValueError, match="between 1 and 100"):
         index.search("alpha", top_k=0)
+
+
+def test_filters_are_applied_before_bm25_candidate_selection() -> None:
+    with_scripts = replace(_document(1, "alpha"), has_scripts=True)
+    without_scripts = _document(2, "alpha")
+    index = _index(with_scripts, without_scripts)
+
+    results = index.search("alpha", filters=RetrievalFilters(has_scripts=True))
+
+    assert [result.document.skill_id for result in results] == [with_scripts.skill_id]
 
 
 def test_unicode_and_technical_query_tokens_match() -> None:

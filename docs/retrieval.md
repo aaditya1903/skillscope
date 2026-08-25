@@ -112,3 +112,98 @@ queries, never on the test split or these five hand-selected smoke queries.
 The verified implementation commit is
 `c71aa40f388c88aa7fe9d5c8124c8fca52228d3d`, with successful GitHub Actions run
 [32777591410](https://github.com/aaditya1903/skillscope/actions/runs/32777591410).
+
+## Dense embedding contract
+
+`config/retrieval/dense-hybrid-v1.json` freezes every choice that can change a
+dense ranking:
+
+- model `sentence-transformers/all-MiniLM-L6-v2` at resolved Hugging Face
+  revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`;
+- `sentence-transformers` 6.0.0 on CPU with remote model code disabled;
+- 384-dimensional, L2-normalized vectors and cosine distance;
+- the model's documented 256-wordpiece maximum sequence length;
+- 16-document indexing batches; and
+- the exact frozen corpus and BM25 configuration hashes.
+
+The model input is versioned as `labelled-retrieval-fields-v1` and always uses
+this order:
+
+```text
+name: ...
+description: ...
+metadata: ...
+headings: ...
+body: ...
+```
+
+Name, description, metadata, and headings therefore precede the potentially
+long body when the model applies its documented truncation. The application
+hashes the complete UTF-8 input even when its final wordpieces are truncated.
+Changing any field, its construction order, the source content hash, model
+revision, or retrieval configuration makes the stored vector stale.
+
+Each populated vector records model ID, resolved revision, configuration
+SHA-256, source-content SHA-256, input-text SHA-256, and indexing time in the
+same row. A database CHECK constraint requires either a complete vector plus
+provenance or no vector and no provenance. Re-ingestion clears all derived
+embedding fields when source content changes. An identical indexing run skips
+current rows without loading the model.
+
+The real model is an explicit local extra so ordinary CI never depends on
+Hugging Face availability:
+
+```bash
+uv run --extra model skillscope index dense
+SKILLSCOPE_RUN_MODEL_SMOKE=1 uv run --extra model pytest tests/model -v
+```
+
+Most tests inject deterministic normalized vectors. The opt-in smoke test is
+the only test allowed to download and execute the real model.
+
+## Exact dense search
+
+Dense queries use the same pinned encoder and normalization as documents.
+PostgreSQL orders the eligible frozen skill rows by pgvector cosine distance;
+the returned debug score is `1 - cosine_distance`, an interpretable cosine
+similarity in `[-1, 1]`. Repository name, path, and stable ID break exact
+distance ties deterministically.
+
+No HNSW or IVFFlat index exists. pgvector performs exact nearest-neighbour
+search by default, which gives perfect vector-search recall and is appropriate
+for 144 documents. Query work is `O(Nd)` for `N` eligible vectors of dimension
+`d = 384`, while storage is `O(Nd)`. Approximate indexing remains deferred
+until a larger measured corpus justifies its recall and operational trade-off.
+
+## Hybrid reciprocal-rank fusion
+
+BM25 scores and cosine similarities are not numerically comparable. Hybrid
+search therefore fuses one-based ranks rather than adding raw scores:
+
+```text
+RRF(d) = 1 / (60 + bm25_rank(d)) + 1 / (60 + dense_rank(d))
+```
+
+The frozen configuration retrieves 50 candidates from each method, uses equal
+weights, deduplicates by stable document ID, and returns BM25 rank, dense rank,
+source scores, and fused score. Missing documents contribute only from the
+ranking in which they occur. Exact fused-score ties use best source rank,
+repository, path, and document ID.
+
+Licence status, validation status, and script-presence filters are shared
+objects applied before candidate selection by both retrievers. This avoids the
+failure mode where post-fusion filtering removes results without allowing an
+eligible document to enter either top-50 list.
+
+```bash
+uv run --extra model skillscope search "inspect a repository without changing it" \
+  --mode dense
+uv run --extra model skillscope search "inspect a repository without changing it" \
+  --mode hybrid
+```
+
+Primary references: the
+[`all-MiniLM-L6-v2` model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2),
+the
+[`SentenceTransformer` API](https://www.sbert.net/docs/package_reference/sentence_transformer/model.html),
+and the [pgvector query documentation](https://github.com/pgvector/pgvector#querying).
