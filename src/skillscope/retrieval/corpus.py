@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, literal, select
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session
 
 from skillscope.db.enums import LicenseStatus, ValidationStatus
@@ -105,6 +106,7 @@ def load_frozen_corpus(
     config: BM25BaselineConfig,
     *,
     snapshot_path: Path | None = None,
+    project_root: Path | None = None,
 ) -> FrozenCorpus:
     """Load valid and warning skills after snapshot and database reconciliation."""
 
@@ -118,6 +120,8 @@ def load_frozen_corpus(
 
     snapshot = read_dataset_snapshot(resolved_snapshot_path)
     candidate_path = Path(snapshot.header.candidate_manifest_path)
+    if project_root is not None:
+        candidate_path = project_root / candidate_path
     candidate_bytes = _read_bytes(candidate_path, "candidate manifest")
     candidate_sha256 = hashlib.sha256(candidate_bytes).hexdigest()
     if candidate_sha256 != snapshot.header.candidate_manifest_sha256:
@@ -235,6 +239,29 @@ def load_frozen_corpus(
         snapshot_sha256=snapshot_sha256,
         documents=tuple(documents),
     )
+
+
+def stored_skill_fingerprint(session: Session) -> str:
+    """Summarise every stored skill's retrieval-relevant identity in one query.
+
+    A serving process may reuse an already reconciled corpus while this value is
+    unchanged. Any re-ingestion, licence change, or validation change alters it,
+    so a stale corpus is still rejected without repeating the full rebuild.
+    """
+
+    identity = func.concat_ws(
+        ":",
+        Skill.content_sha256,
+        Skill.validation_status,
+        Skill.has_scripts,
+        Repository.license_status,
+    )
+    statement = select(
+        func.count(Skill.id),
+        func.md5(func.string_agg(identity, aggregate_order_by(literal(","), identity))),
+    ).join(Repository, Skill.repository_id == Repository.id)
+    count, digest = session.execute(statement).one()
+    return f"{int(count)}:{digest or ''}"
 
 
 def _read_bytes(path: Path, label: str) -> bytes:

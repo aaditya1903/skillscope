@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 
 _SAFE_CONTEXT_FIELDS = (
     "correlation_id",
+    "request_id",
     "http_method",
     "http_status",
+    "duration_ms",
     "attempt",
     "rate_limit_resource",
     "retry_delay_seconds",

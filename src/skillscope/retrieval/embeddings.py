@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
+from threading import Lock
 from typing import Any, Protocol
 
 import numpy as np
@@ -45,6 +46,7 @@ class SentenceTransformerEncoder:
         self.model_revision: str = config.model_revision
         self.dimension: int = config.model_dimension
         self._model: Any | None = None
+        self._model_load_lock = Lock()
 
     def encode(self, texts: Sequence[str], *, batch_size: int) -> np.ndarray:
         """Encode inert text without prompts, remote code, or model mutation."""
@@ -74,6 +76,14 @@ class SentenceTransformerEncoder:
     def _load_model(self) -> Any:
         if self._model is not None:
             return self._model
+
+        with self._model_load_lock:
+            if self._model is None:
+                self._model = self._create_model()
+        return self._model
+
+    def _create_model(self) -> Any:
+        """Load and validate the pinned model while holding the initialization lock."""
 
         try:
             installed_version = importlib.metadata.version("sentence-transformers")
@@ -108,7 +118,6 @@ class SentenceTransformerEncoder:
             raise EmbeddingContractError(
                 "embedding model sequence length differs from the pinned configuration"
             )
-        self._model = model
         return model
 
 

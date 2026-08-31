@@ -2,8 +2,9 @@
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from skillscope import __version__
@@ -26,6 +27,31 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @field_validator("frontend_origin")
+    @classmethod
+    def validate_frontend_origin(cls, value: str) -> str:
+        """Require one exact HTTP(S) origin rather than a wildcard or URL path."""
+
+        normalized = value.strip()
+        parsed = urlsplit(normalized)
+        try:
+            parsed_port = parsed.port
+        except ValueError as error:
+            raise ValueError("frontend_origin contains an invalid port") from error
+        if (
+            normalized == "*"
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+            or (":" in parsed.netloc and parsed_port is None)
+        ):
+            raise ValueError("frontend_origin must be one exact HTTP(S) origin")
+        return normalized.rstrip("/")
 
 
 @lru_cache

@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 9, versioned retrieval API
-- Objective: expose the frozen BM25, exact dense and hybrid retrieval services through safe versioned FastAPI endpoints
-- Exit gate: liveness and readiness differ; all three modes, filters and explanations work; invalid requests and missing skills return typed errors; no secret, body or stack trace leaks; OpenAPI matches runtime responses
+- Milestone: 10, React and TypeScript interface
+- Objective: build the accessible search, skill-detail and observatory views on the verified versioned API
+- Exit gate: frontend type check, tests and production build pass; loading, empty and error states render; source links are safe; indexed content cannot inject HTML or script; the layout works on laptop and mobile
 - Status: active
 
 ## P0 release checklist
@@ -35,7 +35,7 @@ not the user interface.
 - [x] Dense retrieval
 - [x] Hybrid RRF retrieval
 - [x] nDCG@10, MRR@10 and Recall@10 evaluation
-- [ ] Versioned FastAPI endpoints
+- [x] Versioned FastAPI endpoints
 - [ ] Minimal React/TypeScript search, detail and statistics interface
 - [ ] Unit and integration tests
 - [ ] Docker Compose demonstration
@@ -122,9 +122,9 @@ not the user interface.
 - BM25 direct-intent ranks across the 5 smoke queries: 2, 1, 2, 5 and 1
 - BM25 qualitative limitation: unweighted term frequency and document-length effects can rank adjacent document tools or broadly matching skills above the most literal skill; the PDF query was the weakest case
 - BM25 CLI: deterministic JSON results expose matched terms and per-term score components without returning skill bodies
-- Ruff formatting: passing across 105 files
+- Ruff formatting: passing across 122 files
 - Ruff linting: passing
-- Strict mypy: passing across 46 source files
+- Strict mypy: passing across 56 source files
 - CLI version command: 0.1.0
 - API liveness: /healthz returned HTTP 200 with the expected response
 - Database service: PostgreSQL 18.6 healthy through Docker Compose
@@ -184,6 +184,28 @@ not the user interface.
 - Milestone 8 implementation commit: `5c3407f2649fd23448361623355b68decfc88a9c`
 - Milestone 8 implementation CI run: [32799235688](https://github.com/aaditya1903/skillscope/actions/runs/32799235688)
 <!-- M8_VERIFIED_METRICS_END -->
+<!-- M9_VERIFIED_METRICS_START -->
+- Milestone 9 exit gate: complete
+- Backend tests: 328 passing and 1 opt-in model smoke test skipped
+- Backend coverage: 85% against the 80% threshold
+- API surface: `/healthz`, `/readyz`, `/api/v1/search`, `/api/v1/skills/{skill_id}`, `/api/v1/stats` and `/api/v1/evaluations/latest`
+- API liveness and readiness: `/healthz` answers without PostgreSQL while `/readyz` verified database, 144-document frozen retrieval evidence and the pinned model runtime
+- API retrieval modes: `bm25`, `dense` and `hybrid` verified against the populated local database with method-specific score explanations
+- API filters: licence, validation and script filters verified, including the empty result an `invalid` validation filter correctly produces
+- API error paths verified: 400 whitespace query, 404 missing skill, 422 invalid UUID, enum, bound and missing parameter
+- API leakage checks: no body sentinel, token, database URL or stack trace in responses or logs
+- API CORS: exactly one configured origin echoed; a foreign origin received no allow-origin header
+- OpenAPI: 3.1.0 with 6 documented operations, 31 schemas and `/docs` reachable
+- Uvicorn access log disabled in `skillscope serve` so raw query strings are never recorded
+- Corpus reload cost before caching: roughly 393 ms of reconciliation plus 57 ms of BM25 index construction per request
+- Warm API latency after caching: BM25 about 10 ms, dense and hybrid about 45 ms per whole request
+- Corpus cache invalidation: verified to rebuild and reject drift rather than serve a stale corpus
+- Ingestion commit pinning: candidates are fetched at the discovery permalink commit
+- Frozen-manifest rerun after pinning: 2 previously `candidate_changed` skills restored; 155 unchanged; 43 invalid; 0 errors
+- Restored database state: 169 repositories, 157 stored skills and the frozen 144-document retrieval corpus
+- Restored embedding coverage: 144 of 144 at model revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`
+- Reproduced development comparison on the restored corpus: `bm25` nDCG@10 `0.8159700661`, `dense` `0.8778725187` and `hybrid` `0.8777519964`, matching the Milestone 8 report exactly
+<!-- M9_VERIFIED_METRICS_END -->
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -224,6 +246,11 @@ not the user interface.
 | Keep the real embedding runtime as an explicit local extra | Deterministic mock-vector tests should keep CI independent of Hugging Face availability and multi-gigabyte PyTorch downloads | 2026-08-25 | Not required |
 | Use exact pgvector cosine search without an ANN index | The 144-document frozen corpus does not justify approximate-search recall loss or operational complexity | 2026-08-25 | Not required |
 | Fuse top-50 BM25 and dense ranks with equal-weight RRF at `k = 60` | Rank fusion avoids adding incomparable lexical and cosine score scales while preserving source-rank explanations | 2026-08-25 | Not required |
+| Use BM25 as the API default while retaining explicit dense and hybrid modes | BM25 achieved the highest held-out nDCG@10 and sub-millisecond p95 latency; exposing every mode preserves comparison evidence without implying raw scores are comparable | 2026-08-25 | Not required |
+| Keep the retrieval API read-only and return only bounded body excerpts | Separating observatory reads from ingestion writes and raw upstream content reduces the public attack and leakage surface | 2026-08-25 | Not required |
+| Fetch each candidate at the commit recorded by discovery | The default branch may already serve different bytes, which made a frozen manifest unreproducible; the permalink commit is existing manifest evidence | 2026-08-31 | Planned |
+| Cache the reconciled corpus behind a configuration and stored-skill fingerprint | Tokenizing 144 documents per request cost roughly 450 ms; the fingerprint still forces the rebuild that rejects any drift | 2026-08-31 | Not required |
+| Normalise declared-tool separators for aggregate display only | The specification calls `allowed-tools` space separated, so stored parser evidence must stay verbatim while statistics stay readable | 2026-08-31 | Not required |
 
 ## Blockers
 
@@ -231,6 +258,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Add `/api/v1` response models, structured errors, liveness and database-aware readiness.
-2. Inject frozen retrieval services and expose BM25, dense and hybrid search with bounded filters and score explanations.
-3. Add API integration, leakage and OpenAPI contract tests before documenting the versioned surface.
+1. Scaffold the React, TypeScript and Vite workspace with a typed API client.
+2. Implement the search, skill-detail and observatory views with accessible loading, empty and error states.
+3. Add focused component tests and wire frontend lint, type-check, test and build into CI.

@@ -129,7 +129,15 @@ def serve(
     reload: bool = typer.Option(False, help="Reload when source files change."),
 ) -> None:
     """Start the development API server."""
-    uvicorn.run("skillscope.api.main:app", host=host, port=port, reload=reload)
+    # The application emits its own structured access log. Uvicorn's default one
+    # would additionally record raw query strings, so it stays off.
+    uvicorn.run(
+        "skillscope.api.main:app",
+        host=host,
+        port=port,
+        reload=reload,
+        access_log=False,
+    )
 
 
 @app.command("search")
