@@ -278,11 +278,14 @@ async def _ingest_candidate(
             _store_unchanged(session_factory, run_id, existing, outcome)
             return outcome
 
+        # Prefer the commit frozen at discovery so a rerun reproduces the same
+        # bytes even after the default branch has moved on.
+        ref = candidate.pinned_commit or repository.default_branch
         file_response = await client.get_file(
             repository.owner,
             repository.name,
             candidate.path,
-            repository.default_branch,
+            ref,
         )
         if isinstance(file_response, GitHubNotModifiedResponse):
             raise CandidateChangedError("unexpected conditional response without a saved ETag")
@@ -296,7 +299,7 @@ async def _ingest_candidate(
             repository.owner,
             repository.name,
             directory_path,
-            repository.default_branch,
+            ref,
         )
         directory_entries = _parser_directory_entries(
             candidate,

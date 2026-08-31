@@ -70,7 +70,7 @@ For each candidate, the runner:
 2. checks for an existing `(repository_id, path)` skill;
 3. records `unchanged` without fetching the file when the Git blob SHA matches;
 4. otherwise fetches the bounded `SKILL.md` and its containing-directory
-   metadata;
+   metadata at the commit discovery recorded for that file;
 5. verifies that the fetched path and blob SHA still match discovery;
 6. parses the file and extracts structural signals without execution;
 7. transactionally inserts or updates the repository, skill and supporting-file
@@ -111,6 +111,21 @@ An identical second run must satisfy all of the following:
 
 A changed Git blob SHA updates the existing skill row, replaces supporting-file
 metadata, clears stale embeddings and clears `indexed_at`.
+
+### Commit pinning
+
+GitHub code search returns a permalink whose ref is the commit the search index
+matched, and the candidate manifest already stores it. Fetches use that commit
+rather than the repository default branch.
+
+Without pinning, a rerun of a frozen manifest fails with `candidate_changed`
+for every file rewritten upstream since discovery, because the default branch
+now serves a different blob. Pinning makes the manifest reproduce the same
+bytes for as long as the commit remains reachable, which is what binds the
+frozen corpus, qrels and evaluation reports to one another.
+
+A manifest entry without a commit permalink falls back to the default branch
+and keeps the original behaviour, including the `candidate_changed` guard.
 
 ## Failure categories
 

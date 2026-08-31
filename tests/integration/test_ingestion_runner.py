@@ -55,6 +55,7 @@ class FakeIngestionClient(IngestionClient):
         self.file_errors: dict[tuple[str, str], Exception] = {}
         self.file_requests = 0
         self.directory_requests = 0
+        self.requested_refs: list[str] = []
 
     def add_repository(
         self,
@@ -123,7 +124,8 @@ class FakeIngestionClient(IngestionClient):
         *,
         etag: str | None = None,
     ) -> GitHubResponse[GitHubFilePayload]:
-        del ref, etag
+        del etag
+        self.requested_refs.append(ref)
         self.file_requests += 1
         full_name = f"{owner}/{repository}"
         error = self.file_errors.get((full_name, path))
@@ -154,7 +156,7 @@ class FakeIngestionClient(IngestionClient):
         path: str,
         ref: str,
     ) -> GitHubResponse[tuple[GitHubDirectoryEntryPayload, ...]]:
-        del ref
+        self.requested_refs.append(ref)
         self.directory_requests += 1
         full_name = f"{owner}/{repository}"
         skill_path = f"{path}/SKILL.md" if path else "SKILL.md"
@@ -204,6 +206,8 @@ def _response[PayloadT](
 
 def _manifest(
     candidates: list[tuple[int, str, str, str]],
+    *,
+    commit: str = "main",
 ) -> CandidateManifest:
     records = tuple(
         CandidateManifestCandidate(
@@ -212,7 +216,7 @@ def _manifest(
             repository_html_url=f"https://github.com/{full_name}",
             path=path,
             git_blob_sha=sha,
-            html_url=f"https://github.com/{full_name}/blob/main/{path}",
+            html_url=f"https://github.com/{full_name}/blob/{commit}/{path}",
             matched_queries=(QUERY,),
         )
         for repository_id, full_name, path, sha in candidates
@@ -467,3 +471,33 @@ async def test_per_item_failure_is_safe_and_does_not_stop_later_candidates(
         "message": "GitHub content exceeded an ingestion safety limit.",
     }
     assert secret not in items[0].reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("commit", "expected_ref"),
+    [("c" * 40, "c" * 40), ("main", "main")],
+)
+async def test_fetches_use_the_commit_frozen_at_discovery(
+    db_session: Session,
+    commit: str,
+    expected_ref: str,
+) -> None:
+    client = FakeIngestionClient()
+    full_name = "skillscope-tests/catalogue"
+    path = "skills/alpha/SKILL.md"
+    sha = "1" * 40
+    client.add_repository(full_name, 511)
+    client.add_file(full_name, path, sha, _skill_content("alpha"))
+    manifest = _manifest([(511, full_name, path, sha)], commit=commit)
+
+    summary = await run_ingestion(
+        client,
+        _factory(db_session),
+        manifest,
+        manifest_path=Path("data/manifests/candidates.jsonl"),
+        git_commit_sha=GIT_COMMIT,
+    )
+
+    assert summary.ingested_count == 1
+    assert client.requested_refs == [expected_ref, expected_ref]

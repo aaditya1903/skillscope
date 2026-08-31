@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,11 @@ DEFAULT_SEARCH_MARKERS = ("description", "name")
 MAX_DISCOVERY_QUERIES = 20
 MAX_DISCOVERY_TARGET = 1_000
 MAX_DISCOVERY_PAGES_PER_QUERY = 10
+
+# GitHub returns a permalink whose ref is the commit the search index matched.
+_PERMALINK_PATTERN = re.compile(
+    r"^https://github\.com/[^/]+/[^/]+/blob/(?P<commit>[0-9a-f]{40})/(?P<path>.+)$"
+)
 
 
 class DiscoveryClient(Protocol):
@@ -62,6 +68,22 @@ class SkillCandidate:
     def identity(self) -> str:
         """Return the repository-ID and path deduplication key."""
         return f"{self.repository_id}:{self.path}"
+
+    @property
+    def pinned_commit(self) -> str | None:
+        """Return the commit the discovery permalink recorded for this file.
+
+        Fetching that commit rather than the default branch keeps a rerun
+        reproducible after upstream rewrites the file, and it is already frozen
+        evidence because the permalink is stored in the candidate manifest.
+        Returns ``None`` when GitHub used a non-permalink form, in which case
+        the caller falls back to the repository default branch.
+        """
+
+        match = _PERMALINK_PATTERN.fullmatch(self.html_url)
+        if match is None or match.group("path") != self.path:
+            return None
+        return match.group("commit")
 
 
 @dataclass(frozen=True, slots=True)

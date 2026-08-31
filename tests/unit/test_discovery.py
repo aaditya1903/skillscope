@@ -12,6 +12,7 @@ import pytest
 from skillscope.ingestion.discovery import (
     DiscoveryConflictError,
     DiscoveryPlan,
+    SkillCandidate,
     build_discovery_plan,
     discover_skill_candidates,
     load_seed_repositories,
@@ -256,3 +257,46 @@ async def test_discovery_rejects_unbounded_inputs(
 
     with pytest.raises(ValueError, match=message):
         await discover_skill_candidates(client, plan, **keyword_arguments)
+
+
+@pytest.mark.parametrize(
+    ("html_url", "path", "expected"),
+    [
+        (
+            f"https://github.com/owner/repo/blob/{'c' * 40}/skills/x/SKILL.md",
+            "skills/x/SKILL.md",
+            "c" * 40,
+        ),
+        (
+            "https://github.com/owner/repo/blob/main/SKILL.md",
+            "SKILL.md",
+            None,
+        ),
+        (
+            f"https://github.com/owner/repo/blob/{'c' * 40}/other/SKILL.md",
+            "skills/x/SKILL.md",
+            None,
+        ),
+        (
+            f"https://github.com/owner/repo/raw/{'c' * 40}/SKILL.md",
+            "SKILL.md",
+            None,
+        ),
+    ],
+)
+def test_candidate_pinned_commit_requires_a_matching_permalink(
+    html_url: str,
+    path: str,
+    expected: str | None,
+) -> None:
+    candidate = SkillCandidate(
+        repository_id=10,
+        repository_full_name="owner/repo",
+        repository_html_url="https://github.com/owner/repo",
+        path=path,
+        git_blob_sha="a" * 40,
+        html_url=html_url,
+        matched_queries=("description filename:SKILL.md",),
+    )
+
+    assert candidate.pinned_commit == expected
