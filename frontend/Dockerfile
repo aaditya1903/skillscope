@@ -1,5 +1,5 @@
 # Build the static bundle, then serve it from a minimal web server.
-FROM node:24-trixie-slim AS builder
+FROM node:26-trixie-slim AS builder
 
 WORKDIR /app
 
