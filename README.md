@@ -96,6 +96,31 @@ Interactive OpenAPI documentation is available at
 http://127.0.0.1:8000/docs. See [api.md](docs/api.md) for filters, score
 explanations, error envelopes, readiness semantics, and security boundaries.
 
+## Interface
+
+The React and TypeScript client is a demonstration layer over the evaluated
+retrieval system. Start the API first, then:
+
+~~~bash
+npm ci --prefix frontend
+npm run dev --prefix frontend
+~~~
+
+It serves on http://localhost:5173, which is the single origin the API's CORS
+policy allows by default. The client offers search with all three retrieval
+modes and filters, a skill-detail view and an observatory view carrying the
+corpus distributions and the held-out comparison. See
+[interface.md](docs/interface.md).
+
+Frontend checks:
+
+~~~bash
+npm run lint --prefix frontend
+npm run typecheck --prefix frontend
+npm test --prefix frontend
+npm run build --prefix frontend
+~~~
+
 ## Quality gate
 
 Start the isolated test database, then run the complete local gate:
@@ -144,6 +169,7 @@ SKILLSCOPE_RUN_MODEL_SMOKE=1 \
 - [Retrieval design and score semantics](docs/retrieval.md)
 - [Evaluation methodology and limitations](docs/evaluation.md)
 - [Versioned API contract](docs/api.md)
+- [Interface structure and safety](docs/interface.md)
 
 SkillScope remains private while development proceeds toward v0.1.0. The full
 verified checkpoint is maintained in [PROJECT_STATUS.md](PROJECT_STATUS.md).

@@ -1,0 +1,478 @@
+.app {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.masthead {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.masthead h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.masthead p {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 46rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.tabs button {
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.tabs button:hover {
+  color: var(--text);
+}
+
+.tabs button[aria-current='page'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.search-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.search-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.search-row input[type='search'] {
+  flex: 1 1 22rem;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+}
+
+button.primary:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
+  align-items: flex-end;
+}
+
+.field {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.field select {
+  font: inherit;
+  padding: 0.35rem 0.4rem;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.modes {
+  display: flex;
+  gap: 0.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+
+.modes button {
+  background: none;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.28rem 0.7rem;
+}
+
+.modes button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+.meta-line {
+  color: var(--text-muted);
+  font-size: 0.83rem;
+  margin: 1.25rem 0 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.card-head {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.rank {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.card h3 {
+  font-size: 1.02rem;
+  margin: 0;
+}
+
+.card h3 button {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  text-align: left;
+}
+
+.card p {
+  margin: 0.4rem 0 0;
+}
+
+.snippet {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.badge {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  padding: 0.08rem 0.55rem;
+  text-transform: uppercase;
+}
+
+.badge.valid {
+  border-color: var(--valid);
+  color: var(--valid);
+}
+
+.badge.warning {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.badge.invalid {
+  border-color: var(--invalid);
+  color: var(--invalid);
+}
+
+.card-foot {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  font-size: 0.82rem;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+}
+
+.card-foot .path {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+details.explain {
+  margin-top: 0.55rem;
+  font-size: 0.84rem;
+}
+
+details.explain summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+details.explain table {
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
+details.explain th,
+details.explain td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.2rem 0.5rem 0.2rem 0;
+  text-align: left;
+}
+
+details.explain td.number,
+details.explain th.number {
+  font-family: var(--mono);
+  text-align: right;
+}
+
+.notice {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+}
+
+.notice.error {
+  border-left-color: var(--invalid);
+}
+
+.notice h2 {
+  font-size: 0.95rem;
+  margin: 0 0 0.25rem;
+}
+
+.notice p {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  padding: 1rem 1.15rem;
+}
+
+.panel h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.6rem;
+}
+
+.panel h3 {
+  font-size: 0.9rem;
+  margin: 0 0 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.definitions {
+  display: grid;
+  gap: 0.3rem 1.25rem;
+  grid-template-columns: max-content 1fr;
+  margin: 0;
+}
+
+.definitions dt {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.definitions dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.stat-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.stat {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.85rem;
+}
+
+.stat .value {
+  display: block;
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.stat .label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table.data {
+  border-collapse: collapse;
+  min-width: 34rem;
+  width: 100%;
+}
+
+table.data caption {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding-bottom: 0.4rem;
+  text-align: left;
+}
+
+table.data th,
+table.data td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.75rem 0.35rem 0;
+  text-align: left;
+}
+
+table.data td.number,
+table.data th.number {
+  font-family: var(--mono);
+  text-align: right;
+}
+
+.excerpt {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  margin: 0;
+  max-height: 26rem;
+  overflow: auto;
+  padding: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.back {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  margin-bottom: 0.75rem;
+  padding: 0;
+}
+
+.footnote {
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+}
+
+@media (max-width: 34rem) {
+  .definitions {
+    grid-template-columns: 1fr;
+  }
+
+  .definitions dd {
+    margin-bottom: 0.4rem;
+  }
+}
+
+.visually-hidden-heading {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.mode-field {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.mode-field legend {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0 0.2rem;
+}
+
+/* Long descriptions, paths and score tables must not widen the card itself. */
+.card,
+.card > p,
+.card-foot,
+.card-foot > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+details.explain .table-scroll {
+  max-width: 100%;
+}
+
+details.explain table {
+  min-width: 22rem;
+}

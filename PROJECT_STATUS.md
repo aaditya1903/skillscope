@@ -19,9 +19,9 @@ not the user interface.
 
 ## Current milestone
 
-- Milestone: 10, React and TypeScript interface
-- Objective: build the accessible search, skill-detail and observatory views on the verified versioned API
-- Exit gate: frontend type check, tests and production build pass; loading, empty and error states render; source links are safe; indexed content cannot inject HTML or script; the layout works on laptop and mobile
+- Milestone: 11, hardening, documentation and release
+- Objective: complete the container stack, token-free demonstration path, remaining documentation and clean-clone verification for `v0.1.0`
+- Exit gate: CI green across backend, frontend and a Docker smoke test; one-command demonstration works; a clean clone passes; every public number traces to generated output; no secret or upstream corpus file is tracked
 - Status: active
 
 ## P0 release checklist
@@ -36,7 +36,7 @@ not the user interface.
 - [x] Hybrid RRF retrieval
 - [x] nDCG@10, MRR@10 and Recall@10 evaluation
 - [x] Versioned FastAPI endpoints
-- [ ] Minimal React/TypeScript search, detail and statistics interface
+- [x] Minimal React/TypeScript search, detail and statistics interface
 - [ ] Unit and integration tests
 - [ ] Docker Compose demonstration
 - [x] GitHub Actions green
@@ -46,7 +46,7 @@ not the user interface.
 ## P1 portfolio checklist
 
 - [ ] Additional interface polish and visualisations
-- [ ] Richer query filters and score explanations
+- [x] Richer query filters and score explanations
 - [ ] p50 and p95 latency benchmark
 - [ ] Demo GIF or video
 - [ ] Social-preview image
@@ -206,6 +206,26 @@ not the user interface.
 - Restored embedding coverage: 144 of 144 at model revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`
 - Reproduced development comparison on the restored corpus: `bm25` nDCG@10 `0.8159700661`, `dense` `0.8778725187` and `hybrid` `0.8777519964`, matching the Milestone 8 report exactly
 <!-- M9_VERIFIED_METRICS_END -->
+<!-- M10_VERIFIED_METRICS_START -->
+- Milestone 10 exit gate: complete
+- Frontend stack: React 19, TypeScript 6, Vite 8, Vitest 4 and Testing Library, pinned to Node 24
+- Frontend dependencies: 2 runtime packages; no UI framework, router or state library
+- Frontend tests: 22 passing across 5 files
+- Frontend lint: oxlint with the react, typescript, oxc, jsx-a11y and vitest plugins and `--deny-warnings`
+- Frontend type check: `tsc -b` passing under strict mode with `noUncheckedIndexedAccess`
+- Frontend production build: passing at 214.65 kB raw and 65.78 kB gzipped
+- Frontend views: search, skill detail at `#/skills/{id}` and observatory at `#/observatory`
+- Frontend API client: 6 hand-written typed endpoints mirroring the OpenAPI response models
+- Live browser verification: search returned 10 results in 51.3 ms against the populated database
+- Live browser verification: skill detail rendered all 6 panels with a 1,999-character bounded excerpt
+- Live browser verification: observatory rendered the corpus distributions and the held-out comparison table
+- Keyboard submission: covered by a component test typing `{Enter}` into the search box
+- Escaping evidence: component tests assert markup inside a description or excerpt renders as text and creates no element
+- Outbound links: `target="_blank"` with `rel="noopener noreferrer"` asserted by test
+- Responsive layout: no horizontal page overflow at 375 px on search, detail or observatory
+- CORS in practice: the browser client on `http://localhost:5173` is the single allowed origin
+- CI: frontend lint, type check, test and build job added alongside backend quality
+<!-- M10_VERIFIED_METRICS_END -->
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -251,6 +271,9 @@ not the user interface.
 | Fetch each candidate at the commit recorded by discovery | The default branch may already serve different bytes, which made a frozen manifest unreproducible; the permalink commit is existing manifest evidence | 2026-08-31 | Planned |
 | Cache the reconciled corpus behind a configuration and stored-skill fingerprint | Tokenizing 144 documents per request cost roughly 450 ms; the fingerprint still forces the rebuild that rejects any drift | 2026-08-31 | Not required |
 | Normalise declared-tool separators for aggregate display only | The specification calls `allowed-tools` space separated, so stored parser evidence must stay verbatim while statistics stay readable | 2026-08-31 | Not required |
+| Hand-write the frontend API types instead of generating them | Six read-only endpoints are easier to review than a generator toolchain, and backend contract tests already assert the schema | 2026-09-01 | Not required |
+| Parse two hash routes directly instead of adding a router | Two screens and one detail view do not justify a routing dependency in a demonstration layer | 2026-09-01 | Not required |
+| Keep the search view mounted while a skill detail is open | Returning from a skill preserves the previous results without lifting search state out of the component | 2026-09-01 | Not required |
 
 ## Blockers
 
@@ -258,6 +281,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Scaffold the React, TypeScript and Vite workspace with a typed API client.
-2. Implement the search, skill-detail and observatory views with accessible loading, empty and error states.
-3. Add focused component tests and wire frontend lint, type-check, test and build into CI.
+1. Add the API Dockerfile, Compose application stack and a token-free demonstration fixture corpus.
+2. Add the Docker smoke-test CI job, `Makefile` and clean-clone verification script.
+3. Complete the README, architecture diagram, data card, threat model, ADRs and `SECURITY.md`.
