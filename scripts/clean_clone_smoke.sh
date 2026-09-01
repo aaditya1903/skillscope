@@ -11,7 +11,11 @@ WORKSPACE="$(mktemp -d "${TMPDIR:-/tmp}/skillscope-clean-clone.XXXXXX")"
 CLONE="$WORKSPACE/skillscope"
 DATABASE_CONTAINER="skillscope-clean-clone-db"
 DATABASE_PORT="${CLEAN_CLONE_DB_PORT:-55432}"
-DATABASE_URL="postgresql+psycopg://skillscope:skillscope@127.0.0.1:$DATABASE_PORT/skillscope"
+DATABASE_BASE="postgresql+psycopg://skillscope:skillscope@127.0.0.1:$DATABASE_PORT"
+# The demonstration corpus and the integration suite get separate databases, so
+# a loaded corpus never becomes an implicit test fixture.
+DEMO_DATABASE_URL="$DATABASE_BASE/skillscope"
+TEST_DATABASE_URL="$DATABASE_BASE/skillscope_test"
 
 cleanup() {
   local status=$?
@@ -60,17 +64,18 @@ for _ in $(seq 1 45); do
 done
 [[ "$(docker inspect --format '{{.State.Health.Status}}' "$DATABASE_CONTAINER")" == "healthy" ]] \
   || { echo "the throwaway database never became healthy" >&2; exit 1; }
+docker exec "$DATABASE_CONTAINER" createdb -U skillscope skillscope_test
 
 step "Applying migrations to an empty database"
-DATABASE_URL="$DATABASE_URL" uv run alembic upgrade head
-DATABASE_URL="$DATABASE_URL" uv run alembic check
+DATABASE_URL="$DEMO_DATABASE_URL" uv run alembic upgrade head
+DATABASE_URL="$DEMO_DATABASE_URL" uv run alembic check
 
 step "Loading the demonstration corpus without a GitHub token"
-env -u GITHUB_TOKEN DATABASE_URL="$DATABASE_URL" uv run skillscope demo load
+env -u GITHUB_TOKEN DATABASE_URL="$DEMO_DATABASE_URL" uv run skillscope demo load
 
 step "Searching the demonstration corpus in every mode"
 for mode in bm25 dense hybrid; do
-  DATABASE_URL="$DATABASE_URL" uv run skillscope search "review a code diff" \
+  DATABASE_URL="$DEMO_DATABASE_URL" uv run skillscope search "review a code diff" \
     --mode "$mode" --top-k 3 \
     --config config/demo/bm25-v1.json \
     --dense-config config/demo/dense-hybrid-v1.json >/dev/null
@@ -78,10 +83,10 @@ for mode in bm25 dense hybrid; do
 done
 
 step "Running the quality gate"
-SKILLSCOPE_TEST_DATABASE_URL="$DATABASE_URL" uv run ruff format --check .
-SKILLSCOPE_TEST_DATABASE_URL="$DATABASE_URL" uv run ruff check .
-SKILLSCOPE_TEST_DATABASE_URL="$DATABASE_URL" uv run mypy src
-SKILLSCOPE_TEST_DATABASE_URL="$DATABASE_URL" uv run pytest -q
+SKILLSCOPE_TEST_DATABASE_URL="$TEST_DATABASE_URL" uv run ruff format --check .
+SKILLSCOPE_TEST_DATABASE_URL="$TEST_DATABASE_URL" uv run ruff check .
+SKILLSCOPE_TEST_DATABASE_URL="$TEST_DATABASE_URL" uv run mypy src
+SKILLSCOPE_TEST_DATABASE_URL="$TEST_DATABASE_URL" uv run pytest -q
 
 step "Building the interface"
 npm run lint --prefix frontend
