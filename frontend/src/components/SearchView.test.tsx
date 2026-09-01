@@ -38,6 +38,19 @@ describe('SearchView', () => {
     expect(search).toHaveBeenCalledTimes(1)
   })
 
+  it('runs a shared link query on arrival without a second submit', async () => {
+    const search = vi.spyOn(client, 'searchSkills').mockResolvedValue(searchResponse)
+    render(
+      <SearchView onOpenSkill={() => {}} initialQuery="spreadsheets" initialMode="hybrid" />,
+    )
+
+    expect(await screen.findByText('xlsx')).toBeInTheDocument()
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(search).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'spreadsheets', mode: 'hybrid' }),
+    )
+  })
+
   it('sends the selected retrieval mode and filters', async () => {
     const search = vi
       .spyOn(client, 'searchSkills')

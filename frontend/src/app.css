@@ -316,7 +316,7 @@ details.explain th.number {
 
 .panel h3 {
   font-size: 0.9rem;
-  margin: 0 0 0.4rem;
+  margin: 0.9rem 0 0.4rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -343,6 +343,11 @@ details.explain th.number {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin-bottom: 1rem;
+}
+
+.panel .stat-grid:last-child {
+  margin-bottom: 0;
 }
 
 .stat {
