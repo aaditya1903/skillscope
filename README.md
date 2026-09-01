@@ -112,11 +112,12 @@ verified and is never claimed.
 | Labelled queries | 24 |
 | Relevance judgements | 482 |
 
-A third of the source repositories publish no licence, so **no upstream skill
-content is committed here**. Manifests carry identifiers, hashes and derived
-signals; bodies stay in the local database; responses carry bounded excerpts
-and a link to the source. Details, biases and reproduction steps are in the
-[data card](docs/data-card.md).
+Because many source repositories publish no licence, SkillScope never commits 
+complete upstream SKILL.md bodies or supporting files. The frozen evaluation pool 
+retains bounded, source-attributed description excerpts of at most 500 characters 
+so relevance judgements remain auditable; manifests otherwise contain identifiers,
+hashes, validation outcomes and derived signals. Details, biases and reproduction
+steps are in the [data card](docs/data-card.md).
 
 ## Retrieval methods
 
