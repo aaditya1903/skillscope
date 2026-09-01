@@ -23,9 +23,8 @@ curl --fail --silent --output /dev/null "$FRONTEND/" \
 
 mkdir -p "$OUTPUT"
 
-capture() {
-  local name="$1" path="$2" output="$OUTPUT/$1.png"
-  echo "==> $name"
+run_chrome() {
+  local name="$1" path="$2" output="$3"
   rm -f "$output"
 
   # Headless Chrome reliably writes the file but does not always exit, so wait
@@ -56,7 +55,23 @@ capture() {
 
   kill -9 "$chrome_pid" 2>/dev/null || true
   wait "$chrome_pid" 2>/dev/null || true
-  [[ -s "$output" ]] || { echo "failed to capture $name" >&2; exit 1; }
+  [[ -s "$output" ]]
+}
+
+capture() {
+  local name="$1" path="$2" output="$OUTPUT/$1.png"
+  echo "==> $name"
+  # Chrome intermittently refuses to start straight after a previous headless
+  # instance is killed, so one capture gets a second attempt.
+  for attempt in 1 2 3; do
+    if run_chrome "$name" "$path" "$output"; then
+      return 0
+    fi
+    echo "    attempt $attempt failed; retrying" >&2
+    sleep 3
+  done
+  echo "failed to capture $name" >&2
+  exit 1
 }
 
 capture search "/#/search?q=create%20charts%20from%20a%20spreadsheet"

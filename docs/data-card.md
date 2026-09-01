@@ -88,10 +88,36 @@ Never their contents.
 
 ## Raw content handling
 
-Skill bodies are fetched into the local PostgreSQL database because indexing
-needs them. They are never written to a committed file. The candidate manifest
-and dataset snapshot carry identifiers, hashes, statuses and safe failure
-categories only, and a test asserts they contain no body.
+SkillScope never commits complete upstream `SKILL.md` bodies or supporting
+files. Skill bodies are fetched into the local PostgreSQL database because
+indexing needs them, and are never written to a committed file. The candidate
+manifest and dataset snapshot carry identifiers, hashes, statuses and safe
+failure categories only, and a test asserts they contain no body.
+
+One committed file does retain upstream text. The frozen evaluation pool,
+`data/evaluation/pools/bm25-v1.jsonl`, stores a bounded, source-attributed
+description excerpt for each pooled candidate so that a reader can check a
+relevance judgement without re-running ingestion. Precisely:
+
+| Measure | Value |
+|---|---:|
+| Pooled records carrying an excerpt | 482 |
+| Distinct skills excerpted | 124 |
+| Maximum excerpt length | 500 characters |
+| Mean excerpt length | 324 characters |
+| Total excerpt text, distinct skills | 36,441 characters |
+
+Each excerpt is attributed to its repository, path and content hash. They are
+drawn from the skill's own description — the field an author writes to explain
+what the skill is for — and are bounded rather than complete. The README
+screenshots in `docs/media` likewise show upstream descriptions as they appear
+in the interface.
+
+This is a deliberate trade-off: without the excerpts the qrels would be a list
+of opaque identifiers and the evaluation would not be auditable. If a future
+release needs stricter licensing conservatism, the pool can be regenerated
+with excerpts replaced by hashes, and the screenshots recaptured from the
+demonstration corpus.
 
 The API returns a short snippet in search results and at most 2,000 characters
 of control-character-filtered plain text in skill detail, alongside a link to
@@ -120,6 +146,11 @@ not a recommendation.
 results plus pre-authored seeds. A relevant skill nobody pooled is invisible to
 the metric, so reported recall is an upper bound on pool coverage rather than
 true recall.
+
+**AI-assisted, author-reviewed labelling.** An assistant produced rank- and
+split-blinded pre-annotations, and the author reviewed and accepted every
+positive or partial grade and its rationale before import. One reviewer means
+one perspective and no inter-annotator agreement figure.
 
 **Point-in-time.** Repositories are renamed, made private, force-pushed and
 deleted. Ingestion fetches at recorded commits so the corpus reproduces while

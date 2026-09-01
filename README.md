@@ -1,5 +1,7 @@
 # SkillScope
 
+[![CI](https://github.com/aaditya1903/skillscope/actions/workflows/ci.yml/badge.svg)](https://github.com/aaditya1903/skillscope/actions/workflows/ci.yml)
+
 **An observatory for public Agent Skills: a frozen, validated corpus searched
 three ways and measured against author-reviewed relevance judgements.**
 
@@ -112,12 +114,12 @@ verified and is never claimed.
 | Labelled queries | 24 |
 | Relevance judgements | 482 |
 
-Because many source repositories publish no licence, SkillScope never commits 
-complete upstream SKILL.md bodies or supporting files. The frozen evaluation pool 
-retains bounded, source-attributed description excerpts of at most 500 characters 
-so relevance judgements remain auditable; manifests otherwise contain identifiers,
-hashes, validation outcomes and derived signals. Details, biases and reproduction
-steps are in the [data card](docs/data-card.md).
+Because many source repositories publish no licence, SkillScope never commits
+complete upstream `SKILL.md` bodies or supporting files. The frozen evaluation
+pool retains bounded, source-attributed description excerpts of at most 500
+characters so relevance judgements remain auditable; manifests otherwise
+contain identifiers, hashes, validation outcomes and derived signals. Details,
+biases and reproduction steps are in the [data card](docs/data-card.md).
 
 ## Retrieval methods
 
@@ -143,6 +145,11 @@ See [retrieval.md](docs/retrieval.md).
 development and 8 locked test queries. Candidates were pooled from BM25 results
 and pre-authored seeds, presented rank- and split-blinded, and graded 0
 (not relevant), 1 (relevant with adaptation) or 2 (directly relevant).
+
+Judgements are **AI-assisted, author-reviewed**: an assistant drafted blinded
+pre-annotations, and every positive or partial grade and its rationale was
+reviewed and accepted by the author before import. One reviewer means one
+perspective, so there is no inter-annotator agreement figure.
 
 Configuration was tuned on the development split only, then frozen. The test
 split ran once, and the canonical report refuses to be overwritten. Full
