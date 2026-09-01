@@ -39,6 +39,12 @@ COPY --chown=skillscope:skillscope reports ./reports
 # content only. No upstream skill body is copied into the image.
 COPY --chown=skillscope:skillscope data ./data
 
+# Docker seeds a named volume from the image directory it covers, and creates
+# that directory root-owned when the image has none. Both mount points are
+# written at runtime by an unprivileged user, so they must already exist.
+RUN mkdir -p /app/data/demo/generated /app/config/demo \
+    && chown -R skillscope:skillscope /app/data /app/config
+
 USER skillscope
 EXPOSE 8000
 
