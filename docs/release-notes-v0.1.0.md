@@ -27,7 +27,7 @@ result, and the report says so rather than re-tuning until hybrid led.
 Corpus: 200 candidates discovered, 157 skills stored across 135 repositories,
 144 retrieval-eligible, 482 relevance judgements over 24 queries.
 
-Quality: 339 backend tests at 85% coverage, 27 frontend tests, Ruff, strict
+Quality: 342 backend tests at 85% coverage, 27 frontend tests, Ruff, strict
 mypy, oxlint with warnings denied, and three CI jobs including a container
 smoke test.
 

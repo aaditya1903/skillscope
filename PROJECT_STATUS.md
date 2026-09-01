@@ -228,7 +228,7 @@ not the user interface.
 <!-- M10_VERIFIED_METRICS_END -->
 <!-- M11_VERIFIED_METRICS_START -->
 - Milestone 11 exit gate: complete except the recorded demonstration video
-- Backend tests: 339 passing and 1 opt-in model smoke test skipped
+- Backend tests: 342 passing and 1 opt-in model smoke test skipped
 - Backend coverage: 85% against the 80% threshold
 - Frontend tests: 27 passing across 5 files
 - Quality gate: Ruff format, Ruff lint, strict mypy, oxlint with warnings denied and `tsc -b` all passing

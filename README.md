@@ -204,7 +204,7 @@ make clean-clone-smoke  # verify a fresh clone builds and passes
 make help               # every target
 ```
 
-Backend: 339 tests, 85% coverage, Ruff and strict mypy.
+Backend: 342 tests, 85% coverage, Ruff and strict mypy.
 Frontend: 27 tests, oxlint with warnings denied, and `tsc` in strict mode.
 
 The real model smoke test is opt-in so CI never depends on Hugging Face:
