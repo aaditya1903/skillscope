@@ -1,7 +1,7 @@
 # SkillScope
 
 **An observatory for public Agent Skills: a frozen, validated corpus searched
-three ways and measured against manually labelled relevance judgements.**
+three ways and measured against author-reviewed relevance judgements.**
 
 SkillScope discovers public `SKILL.md` files on GitHub, parses and validates
 them against the Agent Skills specification, stores reproducible metadata in
