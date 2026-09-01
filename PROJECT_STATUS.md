@@ -22,7 +22,7 @@ not the user interface.
 - Milestone: 11, hardening, documentation and release
 - Objective: complete the container stack, token-free demonstration path, remaining documentation and clean-clone verification for `v0.1.0`
 - Exit gate: CI green across backend, frontend and a Docker smoke test; one-command demonstration works; a clean clone passes; every public number traces to generated output; no secret or upstream corpus file is tracked
-- Status: active
+- Status: complete apart from the recorded demonstration video and the public release, both of which the author performs
 
 ## P0 release checklist
 
@@ -37,19 +37,19 @@ not the user interface.
 - [x] nDCG@10, MRR@10 and Recall@10 evaluation
 - [x] Versioned FastAPI endpoints
 - [x] Minimal React/TypeScript search, detail and statistics interface
-- [ ] Unit and integration tests
-- [ ] Docker Compose demonstration
+- [x] Unit and integration tests
+- [x] Docker Compose demonstration
 - [x] GitHub Actions green
-- [ ] README, architecture, data card, evaluation and threat model
-- [ ] Clean-clone verification
+- [x] README, architecture, data card, evaluation and threat model
+- [x] Clean-clone verification
 
 ## P1 portfolio checklist
 
-- [ ] Additional interface polish and visualisations
+- [x] Additional interface polish and visualisations
 - [x] Richer query filters and score explanations
-- [ ] p50 and p95 latency benchmark
+- [x] p50 and p95 latency benchmark
 - [ ] Demo GIF or video
-- [ ] Social-preview image
+- [x] Social-preview image
 - [ ] `v0.1.0` GitHub release
 
 ## P2 deferred scope
@@ -226,6 +226,29 @@ not the user interface.
 - CORS in practice: the browser client on `http://localhost:5173` is the single allowed origin
 - CI: frontend lint, type check, test and build job added alongside backend quality
 <!-- M10_VERIFIED_METRICS_END -->
+<!-- M11_VERIFIED_METRICS_START -->
+- Milestone 11 exit gate: complete except the recorded demonstration video
+- Backend tests: 339 passing and 1 opt-in model smoke test skipped
+- Backend coverage: 85% against the 80% threshold
+- Frontend tests: 27 passing across 5 files
+- Quality gate: Ruff format, Ruff lint, strict mypy, oxlint with warnings denied and `tsc -b` all passing
+- Container images: API on `python:3.12-slim-trixie` with `uv`, interface built with Node 24 and served by nginx
+- Container stack: `db-demo`, `demo-loader`, `api` and `frontend` under the Compose `app` profile with its own database volume
+- Container smoke test: liveness, readiness, all three retrieval modes, skill detail, statistics, a 404 path and the interface document, all passing
+- Container smoke test independence: no GitHub token, no GitHub API call and no model download
+- Demonstration corpus: 12 original synthetic skills committed under `data/demo/skills`
+- Demonstration corpus load: 12 ingested, 0 invalid, 0 errors; an identical rerun reports 12 unchanged
+- Demonstration encoder: deterministic hashing projection, refused for the evaluated configuration and publishing no evaluation report
+- Clean-clone verification: fresh clone of HEAD installs locked dependencies, migrates an empty database, loads the demonstration corpus without a token, searches in all three modes, and passes the whole gate
+- Clean-clone isolation: verified that `.env`, `.venv`, `node_modules`, `data/cache` and `data/raw` are absent from a fresh clone
+- Corpus rebuild from empty: 144 ingested, 0 errors, 157 stored skills and 135 repositories, matching the frozen snapshot exactly
+- Reproduced development comparison after the rebuild: `bm25` nDCG@10 `0.8159700661`, `dense` `0.8778725187` and `hybrid` `0.8777519964`, matching the Milestone 8 report
+- Failure analysis: 6 queries analysed in `docs/evaluation.md` with cause and smallest fix, read from the saved reports
+- Documentation added: architecture, data card, threat model, interface, 6 ADRs and `SECURITY.md`
+- Documentation media: 3 screenshots captured from the running interface by `scripts/capture_screenshots.sh`
+- CI jobs: backend quality, frontend quality and a Docker smoke test
+- Repository hygiene: no secret, upstream corpus file or generated demonstration artefact is tracked
+<!-- M11_VERIFIED_METRICS_END -->
 - Private GitHub repository: aaditya1903/skillscope
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
@@ -274,6 +297,10 @@ not the user interface.
 | Hand-write the frontend API types instead of generating them | Six read-only endpoints are easier to review than a generator toolchain, and backend contract tests already assert the schema | 2026-09-01 | Not required |
 | Parse two hash routes directly instead of adding a router | Two screens and one detail view do not justify a routing dependency in a demonstration layer | 2026-09-01 | Not required |
 | Keep the search view mounted while a skill detail is open | Returning from a skill preserves the previous results without lifting search state out of the component | 2026-09-01 | Not required |
+| Ship a committed demonstration corpus of original skills | A clean clone must be able to run the system, and upstream bodies cannot be redistributed to make that possible | 2026-09-01 | Not required |
+| Pin a deterministic hashing encoder for the demonstration corpus only | The container path must exercise dense and hybrid search without a multi-gigabyte download, and the encoder is refused for the evaluated configuration so it can never stand in for a measured result | 2026-09-01 | Not required |
+| Give the container stack its own database volume | A demonstration must never write into, or read from, the evaluated local corpus | 2026-09-01 | Not required |
+| Remove demonstration volumes by name rather than with `down --volumes` | Compose removes every named volume in the file, which destroyed the development corpus once | 2026-09-01 | Not required |
 
 ## Blockers
 
@@ -281,6 +308,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Add the API Dockerfile, Compose application stack and a token-free demonstration fixture corpus.
-2. Add the Docker smoke-test CI job, `Makefile` and clean-clone verification script.
-3. Complete the README, architecture diagram, data card, threat model, ADRs and `SECURITY.md`.
+1. Review the branch, then merge it and confirm GitHub Actions is green on `main`.
+2. Record the 30 to 60 second demonstration video and add it to the README.
+3. Make the repository public, set its description and topics, and tag `v0.1.0`.

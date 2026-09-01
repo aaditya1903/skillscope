@@ -1,0 +1,190 @@
+<!doctype html>
+<!--
+  Source for the GitHub social-preview image. Rendered to
+  docs/media/social-preview.png at 1280x640 by scripts/capture_screenshots.sh.
+  Every number here is copied from the committed evaluation report.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SkillScope social preview</title>
+    <style>
+      :root {
+        --page: #0f1216;
+        --surface: #1b2129;
+        --border: #2d343e;
+        --text: #e7eaee;
+        --muted: #9aa3b0;
+        --accent: #7aa7e8;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        background: var(--page);
+        color: var(--text);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 76px;
+      }
+
+      h1 {
+        font-size: 76px;
+        letter-spacing: -0.02em;
+        margin: 0 0 14px;
+      }
+
+      p.lede {
+        color: var(--muted);
+        font-size: 27px;
+        line-height: 1.45;
+        margin: 0 0 40px;
+        max-width: 30ch;
+      }
+
+      .split {
+        display: flex;
+        gap: 72px;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+
+      table {
+        border-collapse: collapse;
+        font-size: 21px;
+      }
+
+      caption {
+        color: var(--muted);
+        font-size: 17px;
+        letter-spacing: 0.06em;
+        padding-bottom: 10px;
+        text-align: left;
+        text-transform: uppercase;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--border);
+        padding: 9px 0;
+        text-align: left;
+      }
+
+      th + th,
+      td + td {
+        padding-left: 34px;
+      }
+
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      td.number,
+      th.number {
+        font-family: var(--mono);
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      tr.best td {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .facts {
+        display: grid;
+        gap: 22px;
+        padding-top: 34px;
+      }
+
+      .fact .value {
+        display: block;
+        font-family: var(--mono);
+        font-size: 40px;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      .fact .label {
+        color: var(--muted);
+        font-size: 17px;
+      }
+
+      .fact.stack {
+        display: grid;
+        gap: 4px;
+        padding-top: 4px;
+      }
+
+      .fact.stack .label {
+        font-family: var(--mono);
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SkillScope</h1>
+    <p class="lede">
+      An observatory for public Agent Skills: one frozen corpus, searched three
+      ways, measured against labelled relevance judgements.
+    </p>
+
+    <div class="split">
+      <table>
+        <caption>Held-out test split, 8 queries</caption>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th class="number">nDCG@10</th>
+            <th class="number">MRR@10</th>
+            <th class="number">p95 ms</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="best">
+            <td>BM25</td>
+            <td class="number">0.8363</td>
+            <td class="number">0.8750</td>
+            <td class="number">0.958</td>
+          </tr>
+          <tr>
+            <td>Dense</td>
+            <td class="number">0.8274</td>
+            <td class="number">0.9063</td>
+            <td class="number">20.448</td>
+          </tr>
+          <tr>
+            <td>Hybrid RRF</td>
+            <td class="number">0.7788</td>
+            <td class="number">0.8125</td>
+            <td class="number">14.783</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="facts">
+        <div class="fact">
+          <span class="value">144</span>
+          <span class="label">retrieval documents</span>
+        </div>
+        <div class="fact">
+          <span class="value">482</span>
+          <span class="label">relevance judgements</span>
+        </div>
+        <div class="fact stack">
+          <span class="label">Python &middot; FastAPI &middot; PostgreSQL &middot; pgvector</span>
+          <span class="label">React &middot; TypeScript &middot; Docker</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

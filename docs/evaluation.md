@@ -265,3 +265,150 @@ that pool are not counted. The 144-document GitHub sample and local latency
 measurements should not be generalized to a complete marketplace or production
 deployment.
 <!-- M8_FINAL_COMPARISON_END -->
+
+<!-- FAILURE_ANALYSIS_START -->
+## Failure analysis
+
+Six queries where at least one method failed, read from the saved reports. Each
+names the intended meaning, what the methods returned, where the failure came
+from, and the smallest honest fix.
+
+### `q008` (development): "write a reusable agent skill"
+
+**Intended:** a skill that helps you author another skill.
+
+**Returned:** BM25 nDCG@10 `0.073`, with `reflect-yourself`, `tenant-check` and
+`agent-recall` on top and nothing relevant until rank 9. Dense scored `0.973`,
+putting `skill-creator` (grade 2) first. Hybrid landed between at `0.488`.
+
+**Cause: vocabulary.** Every document in a corpus of Agent Skills contains the
+words "skill" and "agent", so their IDF is near zero and BM25 is left ranking
+on "write" and "reusable" — terms that describe the *task*, not the *topic*.
+The relevant documents say "author", "scaffold" and "create". This is the
+clearest case in the set of a query whose intent is semantic rather than
+lexical, and it is exactly what dense retrieval is for.
+
+**Smallest fix:** none at the ranking layer. The corpus-wide terms are already
+correctly discounted by IDF. A field-weighted variant that boosts `name` and
+`description` over the body would help, and should be evaluated against the
+unweighted baseline rather than replacing it.
+
+### `q010` (development): "draft an internal project status update"
+
+**Intended:** a skill for writing internal status communications.
+
+**Returned:** BM25 nDCG@10 `1.000`, ranking `internal-comms` (grade 2) first.
+Dense scored `0.000` — the single relevant document was not in its top ten at
+all. Hybrid recovered it to rank 3 for `0.500`.
+
+**Cause: embedding capacity.** This is the mirror image of `q008`. The query is
+almost a literal quotation of the skill's own name and description, which BM25
+matches directly. The embedding of a 384-dimensional MiniLM vector places
+`internal-comms` near a cluster of project-management skills (`beads`,
+`idea-task`) that share its topic but not its purpose, and the true match is
+crowded out.
+
+**Cause, secondary: single relevant document.** With `relevant_count = 1`,
+nDCG@10 is all-or-nothing. One rank-11 placement scores zero, which overstates
+the size of the failure.
+
+**Smallest fix:** nothing model-side without a larger model. Hybrid already
+does the right thing here, and this query is a good argument for keeping it
+available even though it lost overall.
+
+### `q005` (development): "design a polished responsive landing page"
+
+**Intended:** front-end and web-design skills.
+
+**Returned:** the hardest query in the development set, with five relevant
+documents. BM25 `0.547`, dense `0.665`, hybrid `0.746`. BM25 put
+`slack-gif-creator` first — a design-adjacent skill sharing "polished" and
+"design" vocabulary — and retrieved three of five. Dense found four of five but
+ranked the grade-2 `frontend-design` fifth, below three grade-1 documents.
+
+**Cause: ranking, on a graded set.** Both methods found relevant material; they
+disagreed about the ordering, and nDCG punishes putting a grade-1 above a
+grade-2. Fusion helped precisely because the two methods erred differently.
+
+**Smallest fix:** this is the query type hybrid exists for, and hybrid did win
+it. No change.
+
+### `q009` (development): "apply company brand colours and typography"
+
+**Intended:** brand-guideline application.
+
+**Returned:** BM25 `0.336`, dense `0.821`, hybrid `0.676`. All three ranked
+`brand-guidelines` first. BM25 then filled ranks 2–4 with `ui-audit`,
+`enterprise` and `moai-icons-vector` and missed the grade-2 `theme-factory`
+entirely; dense found it at rank 2.
+
+**Cause: text construction.** `theme-factory` describes itself in terms of
+"palette", "tokens" and "themes" and never uses the words "brand" or
+"typography". The lexical document is built from name, description, metadata,
+headings and body, so there is no synonym anywhere for BM25 to match.
+
+**Smallest fix:** a small curated synonym expansion for design vocabulary would
+fix this query and risk hurting others. It should be evaluated on development
+queries before being adopted, not assumed to help.
+
+### `q020` (test): "optimise a resume for a job description"
+
+**Intended:** the CV-tailoring skill in the corpus.
+
+**Returned:** the sharpest split in the whole evaluation. Dense scored `1.000`,
+ranking `resume-jd-optimizer-cn` (grade 2) first. BM25 and hybrid both scored
+`0.000`.
+
+**Cause: language.** The relevant skill is written in Chinese with an English
+name. Its lexical document therefore contains almost none of the query's
+English terms, and the tokenizer — which applies NFKC normalisation and no
+stemming or translation — has nothing to match. The multilingual behaviour of
+the embedding model bridges the gap; the lexical baseline cannot.
+
+**Cause, secondary: fusion.** Hybrid failed even though dense ranked the
+document first. With equal weights and `k = 60`, a document at dense rank 1 and
+absent from BM25's top 50 contributes `1/61`, which several documents ranked
+moderately by *both* methods beat. Rank fusion is deliberately conservative
+about a single-ranker enthusiasm, and here that conservatism was wrong.
+
+**Smallest fix:** this is the strongest evidence in the evaluation for keeping
+dense retrieval as an explicit mode. A weighted RRF that favours the dense
+ranker would help here and must be tuned on development queries only — it
+cannot be chosen on the strength of this test query without invalidating the
+held-out split.
+
+### `q022` (test): "research and summarise an academic paper"
+
+**Intended:** literature-research skills.
+
+**Returned:** the reverse of `q020`. BM25 `0.758` and hybrid `0.516`, both
+retrieving all three relevant documents; dense `0.104`, finding one, at rank 4,
+behind `academic-ref-inserter` and two copies of `doc-coauthoring`.
+
+**Cause: embedding truncation and topical crowding.** The dense input is
+truncated to the model's 256-token sequence limit. For long skills, that keeps
+name, description and headings but discards most of the body where the
+distinguishing detail lives — so several documents about academic writing end
+up close together in vector space, and cosine similarity cannot separate
+"inserts references" from "summarises a paper". BM25 reads the whole document
+and separates them easily.
+
+**Smallest fix:** the truncation policy is the honest suspect and it is
+documented rather than silent. Testing a longer-context model would be the next
+experiment, and it belongs in the roadmap rather than in a retune of this
+frozen configuration.
+
+### What the six cases show
+
+The two decisive failures point in opposite directions: `q008` and `q020` are
+lexical failures that dense retrieval solves, and `q010` and `q022` are
+semantic failures that BM25 solves. Hybrid RRF splits the difference on most
+queries but recovered neither `q020` nor `q008` fully, because equal-weight
+fusion is conservative about a document only one ranker liked.
+
+That is the whole story of why BM25 won the held-out split on a corpus of 144
+keyword-rich English technical documents, and why the honest conclusion is to
+keep all three modes exposed rather than to declare a winner and delete the
+others.
+<!-- FAILURE_ANALYSIS_END -->
+

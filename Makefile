@@ -84,8 +84,10 @@ docker-up: ## Start the containerised demonstration stack
 	@echo "Interface: http://localhost:5173"
 	@echo "API:       http://localhost:8000/docs"
 
-docker-down: ## Stop and remove the containerised stack and its volumes
-	$(COMPOSE) --profile app down --volumes
+docker-down: ## Stop the containerised stack and remove only its own volumes
+	$(COMPOSE) --profile app down
+	docker volume rm --force skillscope_demo_postgres_data \
+		skillscope_demo_evidence skillscope_demo_config 2>/dev/null || true
 
 docker-smoke: ## Build, start and probe the containerised stack, then tear it down
 	./scripts/docker_smoke.sh

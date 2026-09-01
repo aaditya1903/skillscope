@@ -17,7 +17,13 @@ cleanup() {
     echo "--- demo-loader logs ---" >&2
     "${COMPOSE[@]}" logs --no-color --tail 60 demo-loader >&2 || true
   fi
-  "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  # Remove only this stack's volumes by name. `down --volumes` would also
+  # delete the development database volume declared in the same file.
+  "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+  docker volume rm --force \
+    skillscope_demo_postgres_data \
+    skillscope_demo_evidence \
+    skillscope_demo_config >/dev/null 2>&1 || true
   exit $status
 }
 trap cleanup EXIT
