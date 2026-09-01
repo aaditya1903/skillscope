@@ -42,8 +42,7 @@ export function App() {
         <h1>SkillScope</h1>
         <p>
           An observatory for public Agent Skills: a frozen, validated corpus
-          searched three ways and measured against manually labelled relevance
-          judgements.
+          searched three ways and measured against author-reviewed relevance judgements.
         </p>
         <nav className="tabs" aria-label="Views">
           <button
