@@ -19,6 +19,7 @@ from skillscope import __version__
 from skillscope.core.config import get_settings
 from skillscope.db.enums import EvaluationSplit, RetrievalMethod
 from skillscope.db.session import get_session_factory
+from skillscope.demo import DEMO_GIT_COMMIT, LocalFixtureClient, build_demo_manifest
 from skillscope.evaluation.comparison import (
     BM25EvaluationRetriever,
     DenseEvaluationRetriever,
@@ -75,6 +76,7 @@ from skillscope.ingestion.snapshot import (
 )
 from skillscope.retrieval.bm25 import BM25Index
 from skillscope.retrieval.config import (
+    DEMONSTRATION_MODEL_ID,
     BM25BaselineConfig,
     DenseHybridConfig,
     load_bm25_config,
@@ -84,7 +86,7 @@ from skillscope.retrieval.corpus import CorpusIntegrityError, load_frozen_corpus
 from skillscope.retrieval.dense import DenseRetriever
 from skillscope.retrieval.embeddings import (
     EmbeddingContractError,
-    get_sentence_transformer_encoder,
+    get_encoder,
     index_frozen_corpus_embeddings,
 )
 from skillscope.retrieval.hybrid import HybridRetriever
@@ -102,6 +104,10 @@ DEFAULT_COMPARISON_DEVELOPMENT_REPORT_PATH = Path(
     "reports/evaluation/method-comparison-development-v1.json"
 )
 DEFAULT_COMPARISON_TEST_REPORT_PATH = Path("reports/evaluation/method-comparison-test-v1.json")
+DEMO_CANDIDATE_MANIFEST_PATH = Path("data/demo/generated/candidates.jsonl")
+DEMO_DATASET_SNAPSHOT_PATH = Path("data/demo/generated/dataset-snapshot.jsonl")
+DEMO_BM25_CONFIG_PATH = Path("config/demo/bm25-v1.json")
+DEMO_DENSE_HYBRID_CONFIG_PATH = Path("config/demo/dense-hybrid-v1.json")
 
 app = typer.Typer(no_args_is_help=True, help="Operate the SkillScope observatory.")
 ingest_app = typer.Typer(no_args_is_help=True, help="Discover and ingest public skills.")
@@ -110,9 +116,14 @@ evaluation_app = typer.Typer(
     help="Build and run frozen retrieval evaluations.",
 )
 index_app = typer.Typer(no_args_is_help=True, help="Build reproducible retrieval indexes.")
+demo_app = typer.Typer(
+    no_args_is_help=True,
+    help="Load the token-free demonstration corpus.",
+)
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(evaluation_app, name="evaluate")
 app.add_typer(index_app, name="index")
+app.add_typer(demo_app, name="demo")
 console = Console()
 
 
@@ -205,6 +216,27 @@ def index_dense(
     try:
         evidence = _index_dense_embeddings(config_path=config)
     except (CorpusIntegrityError, EmbeddingContractError, ValueError) as error:
+        _fail_safely(str(error))
+    _print_evidence(evidence)
+
+
+@demo_app.command("load")
+def demo_load() -> None:
+    """Ingest the committed demonstration skills and build their retrieval indexes.
+
+    This path needs no GitHub token, no network access and no model download,
+    so a clean clone can start the stack and answer a real search.
+    """
+
+    try:
+        evidence = _load_demo_corpus()
+    except (
+        CorpusIntegrityError,
+        EmbeddingContractError,
+        FileNotFoundError,
+        OSError,
+        ValueError,
+    ) as error:
         _fail_safely(str(error))
     _print_evidence(evidence)
 
@@ -590,9 +622,102 @@ def _search_bm25(
     }
 
 
+def _load_demo_corpus() -> dict[str, object]:
+    project_root = Path.cwd()
+    manifest = build_demo_manifest(project_root)
+    DEMO_CANDIDATE_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    write_candidate_manifest(DEMO_CANDIDATE_MANIFEST_PATH, manifest)
+    manifest_sha256 = hashlib.sha256(serialize_candidate_manifest(manifest)).hexdigest()
+
+    summary = asyncio.run(
+        run_ingestion(
+            LocalFixtureClient(project_root),
+            get_session_factory(),
+            manifest,
+            manifest_path=DEMO_CANDIDATE_MANIFEST_PATH,
+            git_commit_sha=DEMO_GIT_COMMIT,
+        )
+    )
+    session_factory = get_session_factory()
+    with session_factory.begin() as session:
+        snapshot = build_dataset_snapshot(
+            session,
+            manifest,
+            ingestion_run_id=summary.run_id,
+            candidate_manifest_path=DEMO_CANDIDATE_MANIFEST_PATH,
+            generated_at=datetime.now(UTC),
+            git_commit=DEMO_GIT_COMMIT,
+        )
+    write_dataset_snapshot(DEMO_DATASET_SNAPSHOT_PATH, snapshot)
+    snapshot_sha256 = hashlib.sha256(serialize_dataset_snapshot(snapshot)).hexdigest()
+
+    bm25_config = BM25BaselineConfig(
+        k1=1.5,
+        b=0.75,
+        default_top_k=10,
+        corpus_snapshot_path=DEMO_DATASET_SNAPSHOT_PATH.as_posix(),
+        corpus_snapshot_sha256=snapshot_sha256,
+        eligible_validation_statuses=("valid", "warning"),
+    )
+    bm25_bytes = _canonical_config_bytes(bm25_config)
+    DEMO_BM25_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DEMO_BM25_CONFIG_PATH.write_bytes(bm25_bytes)
+
+    dense_config = DenseHybridConfig(
+        model_id="skillscope/demonstration-hashing-v1",
+        model_revision=hashlib.sha1(
+            DEMONSTRATION_MODEL_ID.encode("utf-8"), usedforsecurity=False
+        ).hexdigest(),
+        sentence_transformers_version=None,
+        batch_size=16,
+        default_top_k=10,
+        bm25_weight=1.0,
+        dense_weight=1.0,
+        corpus_snapshot_path=DEMO_DATASET_SNAPSHOT_PATH.as_posix(),
+        corpus_snapshot_sha256=snapshot_sha256,
+        bm25_config_path=DEMO_BM25_CONFIG_PATH.as_posix(),
+        bm25_config_sha256=hashlib.sha256(bm25_bytes).hexdigest(),
+        eligible_validation_statuses=("valid", "warning"),
+    )
+    dense_bytes = _canonical_config_bytes(dense_config)
+    DEMO_DENSE_HYBRID_CONFIG_PATH.write_bytes(dense_bytes)
+
+    index_summary = _index_dense_embeddings(config_path=DEMO_DENSE_HYBRID_CONFIG_PATH)
+    return {
+        "operation": "demo_load",
+        "candidate_count": manifest.header.candidate_count,
+        "ingested_count": summary.ingested_count,
+        "unchanged_count": summary.unchanged_count,
+        "invalid_count": summary.invalid_count,
+        "error_count": summary.error_count,
+        "stored_skill_count": snapshot.header.stored_skill_count,
+        "candidate_manifest_path": DEMO_CANDIDATE_MANIFEST_PATH.as_posix(),
+        "candidate_manifest_sha256": manifest_sha256,
+        "snapshot_path": DEMO_DATASET_SNAPSHOT_PATH.as_posix(),
+        "snapshot_sha256": snapshot_sha256,
+        "bm25_config_path": DEMO_BM25_CONFIG_PATH.as_posix(),
+        "dense_config_path": DEMO_DENSE_HYBRID_CONFIG_PATH.as_posix(),
+        "indexed_count": index_summary["indexed_count"],
+        "model_id": index_summary["model_id"],
+    }
+
+
+def _canonical_config_bytes(config: BM25BaselineConfig | DenseHybridConfig) -> bytes:
+    return (
+        json.dumps(
+            config.model_dump(mode="json"),
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
 def _index_dense_embeddings(*, config_path: Path) -> dict[str, object]:
     dense_config, dense_config_sha256, baseline, _ = _load_dense_retrieval_config(config_path)
-    encoder = get_sentence_transformer_encoder(dense_config)
+    encoder = get_encoder(dense_config)
     session_factory = get_session_factory()
     with session_factory.begin() as session:
         corpus = load_frozen_corpus(session, baseline)
@@ -631,7 +756,7 @@ def _search_dense_or_hybrid(
     session_factory = get_session_factory()
     with session_factory() as session:
         corpus = load_frozen_corpus(session, baseline)
-        encoder = get_sentence_transformer_encoder(dense_config)
+        encoder = get_encoder(dense_config)
         dense = DenseRetriever(
             session,
             corpus,
@@ -937,7 +1062,7 @@ def _evaluate_method_comparison(
             },
         )
         bm25 = BM25Index(corpus, baseline)
-        encoder = get_sentence_transformer_encoder(dense_config)
+        encoder = get_encoder(dense_config)
         dense = DenseRetriever(
             session,
             corpus,

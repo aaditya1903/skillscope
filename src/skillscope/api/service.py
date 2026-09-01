@@ -64,10 +64,7 @@ from skillscope.retrieval.corpus import (
     stored_skill_fingerprint,
 )
 from skillscope.retrieval.dense import DenseResult, DenseRetriever
-from skillscope.retrieval.embeddings import (
-    EmbeddingEncoder,
-    get_sentence_transformer_encoder,
-)
+from skillscope.retrieval.embeddings import EmbeddingEncoder, get_encoder
 from skillscope.retrieval.filters import RetrievalFilters
 from skillscope.retrieval.hybrid import HybridResult, HybridRetriever
 
@@ -122,7 +119,7 @@ class SkillScopeApiService:
         bm25_config_path: str = "config/retrieval/bm25-v1.json",
         dense_config_path: str = "config/retrieval/dense-hybrid-v1.json",
         evaluation_report_path: str = "reports/evaluation/method-comparison-test-v1.json",
-        encoder_factory: EncoderFactory = get_sentence_transformer_encoder,
+        encoder_factory: EncoderFactory = get_encoder,
         version_reader: VersionReader = importlib.metadata.version,
     ) -> None:
         self.project_root = (project_root or Path.cwd()).resolve()
@@ -182,6 +179,13 @@ class SkillScopeApiService:
 
         try:
             dense_config = load_dense_hybrid_config(self.dense_config_path)
+            if not dense_config.uses_evaluated_model:
+                checks["model_runtime"] = ReadinessCheck(
+                    status="ok",
+                    detail="The deterministic demonstration encoder needs no model runtime.",
+                )
+                ready = all(check.status == "ok" for check in checks.values())
+                return ready, checks
             runtime_version = self.version_reader("sentence-transformers")
             if runtime_version != dense_config.sentence_transformers_version:
                 raise ApiServiceUnavailableError("model runtime version is stale")

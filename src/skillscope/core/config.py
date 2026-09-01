@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     github_token: SecretStr | None = None
 
+    # Serving reads these three files. The defaults are the frozen evaluated
+    # corpus; the demonstration stack points them at its own generated evidence.
+    bm25_config_path: str = "config/retrieval/bm25-v1.json"
+    dense_config_path: str = "config/retrieval/dense-hybrid-v1.json"
+    evaluation_report_path: str = "reports/evaluation/method-comparison-test-v1.json"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

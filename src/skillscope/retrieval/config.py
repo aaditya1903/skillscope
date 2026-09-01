@@ -13,6 +13,13 @@ from skillscope.retrieval.text import TOKENIZER_VERSION
 MAX_BASELINE_CONFIG_BYTES = 64 * 1024
 MAX_DENSE_HYBRID_CONFIG_BYTES = 64 * 1024
 
+EVALUATED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
+# A deterministic hashing encoder used only by the token-free demonstration
+# corpus, so a clean clone can exercise dense and hybrid search without
+# downloading a model. It produces no comparable retrieval quality and is never
+# used for an evaluation report.
+DEMONSTRATION_MODEL_ID = "skillscope/demonstration-hashing-v1"
+
 
 class BM25BaselineConfig(BaseModel):
     """Versioned parameters and corpus identity for one lexical baseline."""
@@ -63,9 +70,15 @@ class DenseHybridConfig(BaseModel):
 
     schema_version: Literal[1] = 1
     method: Literal["dense_hybrid"] = "dense_hybrid"
-    model_id: Literal["sentence-transformers/all-MiniLM-L6-v2"]
+    model_id: Literal[
+        "sentence-transformers/all-MiniLM-L6-v2",
+        "skillscope/demonstration-hashing-v1",
+    ]
     model_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
-    sentence_transformers_version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
+    sentence_transformers_version: str | None = Field(
+        default=None,
+        pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$",
+    )
     model_dimension: Literal[384] = 384
     max_sequence_length: Literal[256] = 256
     normalize_embeddings: Literal[True] = True
@@ -86,10 +99,20 @@ class DenseHybridConfig(BaseModel):
     bm25_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     eligible_validation_statuses: tuple[Literal["valid", "warning"], ...]
 
+    @property
+    def uses_evaluated_model(self) -> bool:
+        """Report whether this configuration pins the evaluated local model."""
+
+        return self.model_id == EVALUATED_MODEL_ID
+
     @model_validator(mode="after")
     def validate_retrieval_contract(self) -> DenseHybridConfig:
         _validate_safe_relative_path(self.corpus_snapshot_path, suffix=".jsonl")
         _validate_safe_relative_path(self.bm25_config_path, suffix=".json")
+        if self.uses_evaluated_model and self.sentence_transformers_version is None:
+            raise ValueError("the evaluated model requires a pinned runtime version")
+        if not self.uses_evaluated_model and self.sentence_transformers_version is not None:
+            raise ValueError("the demonstration encoder must not pin a model runtime version")
         if self.eligible_validation_statuses != ("valid", "warning"):
             raise ValueError("dense retrieval must use the frozen valid and warning corpus")
         if self.default_top_k > self.rrf_candidate_depth:

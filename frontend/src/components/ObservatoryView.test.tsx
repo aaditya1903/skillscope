@@ -28,6 +28,21 @@ describe('ObservatoryView', () => {
     expect(screen.getByText(/8 locked test queries/)).toBeInTheDocument()
   })
 
+  it('still reports the corpus when no evaluation is published for it', async () => {
+    vi.spyOn(client, 'fetchStats').mockResolvedValue(statsResponse)
+    vi.spyOn(client, 'fetchLatestEvaluation').mockRejectedValue(
+      new ApiError('Evaluation evidence is temporarily unavailable.', 503, 'evaluation_unavailable'),
+    )
+
+    render(<ObservatoryView />)
+
+    expect(await screen.findByText('144')).toBeInTheDocument()
+    expect(
+      screen.getByText('No published evaluation for this corpus'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('cell', { name: 'Hybrid RRF' })).toBeNull()
+  })
+
   it('reports a failed load without inventing numbers', async () => {
     vi.spyOn(client, 'fetchStats').mockRejectedValue(
       new ApiError('Corpus statistics are temporarily unavailable.', 503, 'statistics_unavailable'),

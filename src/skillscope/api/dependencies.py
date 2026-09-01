@@ -11,7 +11,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from skillscope.api.service import SkillScopeApiService
-from skillscope.core.config import Settings
+from skillscope.core.config import Settings, get_settings
 from skillscope.db.session import get_session_factory
 
 
@@ -32,7 +32,12 @@ def get_app_settings(request: Request) -> Settings:
 def get_api_service() -> SkillScopeApiService:
     """Return the stateless API service with lazily loaded retrieval assets."""
 
-    return SkillScopeApiService()
+    settings = get_settings()
+    return SkillScopeApiService(
+        bm25_config_path=settings.bm25_config_path,
+        dense_config_path=settings.dense_config_path,
+        evaluation_report_path=settings.evaluation_report_path,
+    )
 
 
 class SearchCapacity:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.metadata
 from collections.abc import Sequence
@@ -16,8 +17,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from skillscope.db.models import Skill
-from skillscope.retrieval.config import DenseHybridConfig
+from skillscope.retrieval.config import DEMONSTRATION_MODEL_ID, DenseHybridConfig
 from skillscope.retrieval.corpus import FrozenCorpus, StaleCorpusError
+from skillscope.retrieval.text import tokenize
 
 UNIT_NORM_ABSOLUTE_TOLERANCE = 1e-4
 
@@ -121,11 +123,72 @@ class SentenceTransformerEncoder:
         return model
 
 
+class HashingDemonstrationEncoder:
+    """Deterministic token-hashing encoder for the token-free demonstration corpus.
+
+    It lets a clean clone exercise dense and hybrid retrieval without a model
+    download, and it is reproducible because a token always hashes to the same
+    coordinates. It is a bag-of-words projection with no learned semantics, so
+    it is never used for an evaluation report and never compared with the
+    measured retrieval quality of the pinned local model.
+    """
+
+    def __init__(self, config: DenseHybridConfig) -> None:
+        if config.uses_evaluated_model:
+            raise EmbeddingContractError(
+                "the demonstration encoder cannot serve the evaluated model configuration"
+            )
+        self.config = config
+        self.model_id: str = config.model_id
+        self.model_revision: str = config.model_revision
+        self.dimension: int = config.model_dimension
+
+    def encode(self, texts: Sequence[str], *, batch_size: int) -> np.ndarray:
+        """Project tokenized text onto fixed hashed coordinates and unit-normalize."""
+
+        if not texts:
+            return np.empty((0, self.dimension), dtype=np.float32)
+        if not 1 <= batch_size <= 128:
+            raise EmbeddingContractError("embedding batch size must be between 1 and 128")
+
+        embeddings = np.zeros((len(texts), self.dimension), dtype=np.float32)
+        for row, text in enumerate(texts):
+            for token in tokenize(text):
+                digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+                index = int.from_bytes(digest[:4], "big") % self.dimension
+                sign = 1.0 if digest[4] & 1 else -1.0
+                embeddings[row, index] += sign
+            norm = float(np.linalg.norm(embeddings[row]))
+            # A document with no tokens cannot be placed, so pin it to one axis
+            # rather than emitting a zero vector the unit-norm check rejects.
+            if norm == 0.0:
+                embeddings[row, 0] = 1.0
+            else:
+                embeddings[row] /= norm
+
+        validate_embedding_matrix(
+            embeddings,
+            expected_rows=len(texts),
+            dimension=self.dimension,
+            require_unit_norm=True,
+        )
+        return embeddings
+
+
 @lru_cache(maxsize=4)
 def get_sentence_transformer_encoder(config: DenseHybridConfig) -> SentenceTransformerEncoder:
     """Return one lazily loaded model service per immutable configuration."""
 
     return SentenceTransformerEncoder(config)
+
+
+@lru_cache(maxsize=4)
+def get_encoder(config: DenseHybridConfig) -> EmbeddingEncoder:
+    """Return the encoder the configuration pins, without importing an unused runtime."""
+
+    if config.model_id == DEMONSTRATION_MODEL_ID:
+        return HashingDemonstrationEncoder(config)
+    return get_sentence_transformer_encoder(config)
 
 
 @dataclass(frozen=True, slots=True)
