@@ -91,7 +91,9 @@ Details in [docs/data-card.md](data-card.md) and
 ## Security and licensing
 
 Indexed skills are untrusted third-party content. Nothing discovered is ever
-executed, and no upstream skill body is committed to this repository; each
+executed. No complete upstream `SKILL.md` bodies or supporting files are
+committed. The frozen evaluation pool retains bounded, source-attributed
+description excerpts of at most 500 characters for auditability. Each skill
 remains under its own repository licence. SkillScope's own source is MIT.
 
 See [SECURITY.md](../SECURITY.md) and

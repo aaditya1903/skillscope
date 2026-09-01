@@ -11,18 +11,18 @@ not the user interface.
 
 ## Release policy
 
-- Repository visibility: private during development
-- Public release: only after the `v0.1.0` definition of done passes
+- Repository visibility: public
+- Public release: `v0.1.0` released on 1 September 2026
 - Public metrics: generated from reproducible commands only
 - Third-party bodies: never committed as a dataset
 - Secrets: local environment variables only
 
 ## Current milestone
 
-- Milestone: 11, hardening, documentation and release
-- Objective: complete the container stack, token-free demonstration path, remaining documentation and clean-clone verification for `v0.1.0`
-- Exit gate: CI green across backend, frontend and a Docker smoke test; one-command demonstration works; a clean clone passes; every public number traces to generated output; no secret or upstream corpus file is tracked
-- Status: complete apart from the recorded demonstration video and the public release, both of which the author performs
+- Milestone: released and maintained
+- Objective: keep the published `v0.1.0` accurate, current and reproducible
+- Exit gate: CI green on `main`; every public number still traceable to generated output; dependency updates reviewed rather than merged blind
+- Status: `v0.1.0` released on 1 September 2026; the demonstration video remains outstanding
 
 ## P0 release checklist
 
@@ -50,7 +50,7 @@ not the user interface.
 - [x] p50 and p95 latency benchmark
 - [ ] Demo GIF or video
 - [x] Social-preview image
-- [ ] `v0.1.0` GitHub release
+- [x] `v0.1.0` GitHub release
 
 ## P2 deferred scope
 
@@ -249,7 +249,11 @@ not the user interface.
 - CI jobs: backend quality, frontend quality and a Docker smoke test
 - Repository hygiene: no secret, upstream corpus file or generated demonstration artefact is tracked
 <!-- M11_VERIFIED_METRICS_END -->
-- Private GitHub repository: aaditya1903/skillscope
+- Public GitHub repository: [aaditya1903/skillscope](https://github.com/aaditya1903/skillscope)
+- Release: [v0.1.0](https://github.com/aaditya1903/skillscope/releases/tag/v0.1.0), tagged 1 September 2026 at `b4e9a30`
+- Repository topics: 10
+- Branch protection: `main` requires Backend quality, Frontend quality and Docker smoke test, and blocks force pushes and deletion
+- Dependency updates: Dependabot enabled for uv, npm, GitHub Actions and Docker
 - GitHub Actions: passing
 - Milestone 5 implementation commit: `0aba78808db36a40c79d5b272a929b1fb8ab4de0`
 - Milestone 5 implementation CI run: [32766779848](https://github.com/aaditya1903/skillscope/actions/runs/32766779848)
@@ -308,6 +312,6 @@ No active blockers.
 
 ## Next three actions
 
-1. Review the branch, then merge it and confirm GitHub Actions is green on `main`.
-2. Record the 30 to 60 second demonstration video and add it to the README.
-3. Make the repository public, set its description and topics, and tag `v0.1.0`.
+1. Record the 30 to 60 second demonstration video and add it to the README.
+2. Review the open Dependabot pull requests, treating the TypeScript 7, Node 26 and Python 3.14 major bumps as deliberate decisions rather than routine merges.
+3. Re-run the clean-clone and container smoke checks after any dependency merge, and refresh the recorded counts here if they move.
