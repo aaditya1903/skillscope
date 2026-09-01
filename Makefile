@@ -84,8 +84,8 @@ docker-up: ## Start the containerised demonstration stack
 	@echo "Interface: http://localhost:5173"
 	@echo "API:       http://localhost:8000/docs"
 
-docker-down: ## Stop the containerised stack and remove only its own volumes
-	$(COMPOSE) --profile app down
+docker-down: ## Stop the demonstration stack, leaving the development database alone
+	$(COMPOSE) --profile app rm --stop --force --volumes frontend api demo-loader db-demo
 	docker volume rm --force skillscope_demo_postgres_data \
 		skillscope_demo_evidence skillscope_demo_config 2>/dev/null || true
 

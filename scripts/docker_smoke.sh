@@ -17,9 +17,11 @@ cleanup() {
     echo "--- demo-loader logs ---" >&2
     "${COMPOSE[@]}" logs --no-color --tail 60 demo-loader >&2 || true
   fi
-  # Remove only this stack's volumes by name. `down --volumes` would also
-  # delete the development database volume declared in the same file.
-  "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+  # Remove this stack's own services and volumes by name. A project-wide
+  # `down` would also stop a running development database, and `--volumes`
+  # would delete its data along with the demonstration volumes.
+  "${COMPOSE[@]}" rm --stop --force --volumes \
+    frontend api demo-loader db-demo >/dev/null 2>&1 || true
   docker volume rm --force \
     skillscope_demo_postgres_data \
     skillscope_demo_evidence \
