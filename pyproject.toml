@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.12,<3.13"
 license = "MIT"
 dependencies = [
-    "alembic>=1.19.1",
+    "alembic>=1.19.2",
     "fastapi[standard]>=0.141.1",
     "httpx>=0.28.1",
     "numpy>=2.5.2",
